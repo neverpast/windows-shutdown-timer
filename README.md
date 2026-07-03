@@ -6,7 +6,7 @@ Defaults:
 
 - 23:45: voice + Windows notification, "还有15分钟自动关机"
 - 23:55: voice + Windows notification, "还有5分钟自动关机"
-- 00:00: normal shutdown with `shutdown.exe /s /t 0`
+- 00:00: voice countdown from 10 to 1, then normal shutdown with `shutdown.exe /s /t 0`
 
 The app does not force-close applications by default. Unsaved documents can block shutdown.
 

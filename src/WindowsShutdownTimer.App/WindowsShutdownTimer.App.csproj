@@ -15,6 +15,7 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <AssemblyName>WindowsShutdownTimer</AssemblyName>
     <RootNamespace>WindowsShutdownTimer.App</RootNamespace>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <Version>1.0.0</Version>
     <Authors>WindowsShutdownTimer</Authors>
     <Product>Windows 定时关机</Product>

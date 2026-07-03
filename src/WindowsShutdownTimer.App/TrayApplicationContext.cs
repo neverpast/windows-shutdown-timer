@@ -16,6 +16,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private AppSettings _settings;
     private ToolStripMenuItem _pauseItem = null!;
     private ToolStripMenuItem _resumeItem = null!;
+    private bool _shutdownCountdownRunning;
 
     public TrayApplicationContext(
         SettingsStore settingsStore,
@@ -33,7 +34,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         _notifyIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application,
             Text = "Windows 定时关机",
             Visible = true
         };
@@ -139,12 +140,37 @@ public sealed class TrayApplicationContext : ApplicationContext
             }
             else if (dueEvent.Type == ScheduleEventType.Shutdown)
             {
-                SendReminder("到点了，正在执行自动关机。", speak: true, toast: true);
-                _shutdownService.Shutdown(_settings.ForceShutdown);
+                StartShutdownCountdown();
             }
         }
 
         UpdatePauseMenu();
+    }
+
+    private async void StartShutdownCountdown()
+    {
+        if (_shutdownCountdownRunning)
+        {
+            return;
+        }
+
+        _shutdownCountdownRunning = true;
+        _timer.Stop();
+
+        try
+        {
+            var forceShutdown = _settings.ForceShutdown;
+            _notificationService.Show("定时关机提醒", "到点了，10秒后自动关机。");
+            ShowBalloon("定时关机提醒", "到点了，10秒后自动关机。");
+            await _speechService.SpeakShutdownCountdownAsync();
+            _shutdownService.Shutdown(forceShutdown);
+        }
+        catch (Exception ex)
+        {
+            ShowBalloon("定时关机失败", ex.Message);
+            _shutdownCountdownRunning = false;
+            _timer.Start();
+        }
     }
 
     private void SendReminder(string message, bool speak, bool toast)
