@@ -20,17 +20,9 @@ WindowsShutdownTimer-Setup.exe
 
 The installer puts the app under your Windows user profile, creates Start menu shortcuts, can add a desktop shortcut, and can register startup at login. It does not need administrator permission.
 
-If you do not want an installer, use:
-
-```text
-WindowsShutdownTimer-portable-win-x64.zip
-```
-
-Unzip it anywhere and run `WindowsShutdownTimer.exe`.
-
 ## Create Packages on Windows
 
-Install the .NET 8 SDK. To create both the portable zip and normal installer, install Inno Setup 6, then run:
+Install the .NET 8 SDK and Inno Setup 6, then run:
 
 ```powershell
 .\build.ps1
@@ -40,13 +32,6 @@ Outputs:
 
 ```text
 dist\WindowsShutdownTimer-Setup.exe
-dist\WindowsShutdownTimer-portable-win-x64.zip
-```
-
-If Inno Setup is not installed, create only the portable zip:
-
-```powershell
-.\build.ps1 -SkipInstaller
 ```
 
 ## Settings

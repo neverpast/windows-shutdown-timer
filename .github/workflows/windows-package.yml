@@ -36,6 +36,4 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: WindowsShutdownTimer
-          path: |
-            dist\WindowsShutdownTimer-Setup.exe
-            dist\WindowsShutdownTimer-portable-win-x64.zip
+          path: dist\WindowsShutdownTimer-Setup.exe

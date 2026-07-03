@@ -1,7 +1,6 @@
 param(
     [string]$Configuration = "Release",
-    [string]$Version = "1.0.0",
-    [switch]$SkipInstaller
+    [string]$Version = "1.0.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,7 +8,6 @@ $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $dist = Join-Path $root "dist"
 $publishDir = Join-Path $dist "publish"
-$portableZip = Join-Path $dist "WindowsShutdownTimer-portable-win-x64.zip"
 $setupExe = Join-Path $dist "WindowsShutdownTimer-Setup.exe"
 
 function Invoke-NativeCommand {
@@ -44,36 +42,28 @@ try {
             /p:Version=$Version
     }
 
-    Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $portableZip -Force
+    $iscc = Get-Command iscc.exe -ErrorAction SilentlyContinue
+    if ($null -eq $iscc) {
+        $defaultIscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+        if (Test-Path $defaultIscc) {
+            $iscc = @{ Source = $defaultIscc }
+        }
+    }
 
-    if (-not $SkipInstaller) {
-        $iscc = Get-Command iscc.exe -ErrorAction SilentlyContinue
-        if ($null -eq $iscc) {
-            $defaultIscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-            if (Test-Path $defaultIscc) {
-                $iscc = @{ Source = $defaultIscc }
-            }
-        }
+    if ($null -eq $iscc) {
+        throw "Inno Setup 6 was not found. Install it to create WindowsShutdownTimer-Setup.exe."
+    }
 
-        if ($null -eq $iscc) {
-            Write-Warning "Inno Setup 6 was not found. Portable zip was created, installer was skipped."
-        }
-        else {
-            Invoke-NativeCommand -Name "Inno Setup" -Command {
-                & $iscc.Source (Join-Path $root "installer\WindowsShutdownTimer.iss") "/DAppVersion=$Version"
-            }
-            if (-not (Test-Path $setupExe)) {
-                throw "Installer build finished but $setupExe was not found."
-            }
-        }
+    Invoke-NativeCommand -Name "Inno Setup" -Command {
+        & $iscc.Source (Join-Path $root "installer\WindowsShutdownTimer.iss") "/DAppVersion=$Version"
+    }
+    if (-not (Test-Path $setupExe)) {
+        throw "Installer build finished but $setupExe was not found."
     }
 
     Write-Host ""
     Write-Host "Created:"
-    Write-Host $portableZip
-    if (Test-Path $setupExe) {
-        Write-Host $setupExe
-    }
+    Write-Host $setupExe
 }
 finally {
     Pop-Location
