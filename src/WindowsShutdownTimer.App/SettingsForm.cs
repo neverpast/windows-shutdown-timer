@@ -325,7 +325,7 @@ public sealed class SettingsForm : Form
         checkBox.BackColor = SurfaceBack;
     }
 
-    private static Button CreateBottomButton(string text, int width, ButtonTone tone)
+    private Button CreateBottomButton(string text, int width, ButtonTone tone)
     {
         var (backColor, foreColor) = tone switch
         {
@@ -346,7 +346,7 @@ public sealed class SettingsForm : Form
             FlatStyle = FlatStyle.Flat,
             BackColor = backColor,
             ForeColor = foreColor,
-            Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 9.5F, FontStyle.Regular, GraphicsUnit.Point),
+            Font = new Font(Font.FontFamily, 9.5F, FontStyle.Regular, GraphicsUnit.Point),
             UseVisualStyleBackColor = false
         };
         button.FlatAppearance.BorderColor = tone == ButtonTone.Secondary ? Border : backColor;
