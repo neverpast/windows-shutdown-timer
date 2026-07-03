@@ -6,7 +6,10 @@ var tests = new (string Name, Action Test)[]
     ("calculates next occurrences", CalculatesNextOccurrences),
     ("fires reminders once per day", FiresReminderOncePerDay),
     ("pause tonight skips only selected shutdown date", PauseTonightSkipsOnlySelectedDate),
-    ("shutdown args default stays non-force", DefaultForceShutdownIsFalse)
+    ("shutdown args default stays non-force", DefaultForceShutdownIsFalse),
+    ("default settings restore midnight shutdown", DefaultSettingsRestoreMidnightShutdown),
+    ("settings clone is independent", SettingsCloneIsIndependent),
+    ("defaults store path uses defaults json", DefaultsStorePathUsesDefaultsJson)
 };
 
 var failed = 0;
@@ -91,6 +94,30 @@ static void DefaultForceShutdownIsFalse()
     Equal("/s /t 0 /f", ShutdownCommandBuilder.BuildArguments(true));
 }
 
+static void DefaultSettingsRestoreMidnightShutdown()
+{
+    var defaults = AppSettings.CreateDefault();
+    Equal("00:00", defaults.ShutdownTime);
+    Equal(2, defaults.Reminders.Count);
+}
+
+static void SettingsCloneIsIndependent()
+{
+    var settings = AppSettings.CreateDefault();
+    var clone = settings.Clone();
+
+    clone.ShutdownTime = "21:30";
+    clone.Reminders[0].Message = "changed";
+
+    Equal("00:00", settings.ShutdownTime);
+    Equal("还有15分钟自动关机", settings.Reminders[0].Message);
+}
+
+static void DefaultsStorePathUsesDefaultsJson()
+{
+    True(SettingsStore.GetDefaultSettingsFilePath().EndsWith("defaults.json", StringComparison.OrdinalIgnoreCase));
+}
+
 static void Equal<T>(T expected, T actual)
 {
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
@@ -104,6 +131,14 @@ static void False(bool actual)
     if (actual)
     {
         throw new InvalidOperationException("Expected false.");
+    }
+}
+
+static void True(bool actual)
+{
+    if (!actual)
+    {
+        throw new InvalidOperationException("Expected true.");
     }
 }
 

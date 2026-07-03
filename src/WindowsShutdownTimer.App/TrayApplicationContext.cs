@@ -5,6 +5,7 @@ namespace WindowsShutdownTimer.App;
 public sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly SettingsStore _settingsStore;
+    private readonly SettingsStore _defaultSettingsStore;
     private readonly StartupService _startupService;
     private readonly SpeechReminderService _speechService;
     private readonly WindowsNotificationService _notificationService;
@@ -30,6 +31,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _speechService = speechService;
         _notificationService = notificationService;
         _shutdownService = shutdownService;
+        _defaultSettingsStore = new SettingsStore(SettingsStore.GetDefaultSettingsFilePath());
         _settings = _settingsStore.Load();
 
         _notifyIcon = new NotifyIcon
@@ -68,7 +70,10 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void OpenSettings()
     {
-        using var form = new SettingsForm(_settings);
+        using var form = new SettingsForm(
+            _settings,
+            _defaultSettingsStore.Load(),
+            defaults => _defaultSettingsStore.Save(defaults));
         if (form.ShowDialog() != DialogResult.OK)
         {
             return;

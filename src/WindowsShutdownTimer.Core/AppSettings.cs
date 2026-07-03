@@ -11,6 +11,29 @@ public sealed class AppSettings
 
     public static AppSettings CreateDefault() => new();
 
+    public AppSettings Clone()
+    {
+        return new AppSettings
+        {
+            Enabled = Enabled,
+            ShutdownTime = ShutdownTime,
+            AutoShutdown = AutoShutdown,
+            ForceShutdown = ForceShutdown,
+            StartWithWindows = StartWithWindows,
+            Reminders = (Reminders ?? new List<ReminderSettings>())
+                .Select(r => new ReminderSettings
+                {
+                    Id = r.Id,
+                    Time = r.Time,
+                    Message = r.Message,
+                    Speak = r.Speak,
+                    Toast = r.Toast,
+                    Enabled = r.Enabled
+                })
+                .ToList()
+        };
+    }
+
     public void Normalize()
     {
         ShutdownTime = TimeOfDayParser.Normalize(ShutdownTime);

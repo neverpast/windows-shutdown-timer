@@ -50,4 +50,10 @@ public sealed class SettingsStore
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         return Path.Combine(appData, "WindowsShutdownTimer", "settings.json");
     }
+
+    public static string GetDefaultSettingsFilePath()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        return Path.Combine(appData, "WindowsShutdownTimer", "defaults.json");
+    }
 }

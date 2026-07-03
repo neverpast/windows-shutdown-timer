@@ -24,6 +24,12 @@ ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 UninstallDisplayName={#AppName}
 SetupIconFile=..\src\WindowsShutdownTimer.App\Assets\AppIcon.ico
+UsePreviousAppDir=yes
+UsePreviousGroup=yes
+CloseApplications=yes
+CloseApplicationsFilter={#AppExeName}
+RestartApplications=no
+AlwaysRestart=no
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -34,6 +40,7 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
+Name: "{group}\卸载 {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Registry]
@@ -41,3 +48,10 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "启动 {#AppName}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExeName} /F >NUL 2>&1"; Flags: runhidden
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{userappdata}\WindowsShutdownTimer"
+Type: dirifempty; Name: "{app}"
