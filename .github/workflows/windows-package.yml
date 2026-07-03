@@ -1,0 +1,41 @@
+name: Windows Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version
+        required: true
+        default: 1.0.0
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  package:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build packages
+        shell: pwsh
+        run: .\build.ps1 -Version "${{ github.event.inputs.version || '1.0.0' }}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsShutdownTimer
+          path: |
+            dist\WindowsShutdownTimer-Setup.exe
+            dist\WindowsShutdownTimer-portable-win-x64.zip
