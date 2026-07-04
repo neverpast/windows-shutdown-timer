@@ -19,6 +19,7 @@ public sealed class SettingsForm : Form
     private readonly CheckBox _forceShutdownCheckBox = new() { Text = "强制关闭应用（可能丢失未保存内容）", AutoSize = true };
     private readonly CheckBox _startWithWindowsCheckBox = new() { Text = "登录 Windows 后自动启动", AutoSize = true };
     private readonly TextBox _shutdownTimeTextBox = new() { Width = 80 };
+    private readonly DateTimePicker _shutdownTimePicker = new();
     private readonly DataGridView _remindersGrid = new();
     private readonly Label _shutdownTimeBadge = new();
     private readonly Label _timeUntilShutdownLabel = new();
@@ -26,6 +27,9 @@ public sealed class SettingsForm : Form
     private readonly System.Windows.Forms.Timer _previewTimer = new() { Interval = 30_000 };
     private readonly Action<AppSettings> _saveDefaultSettings;
     private AppSettings _defaultSettings;
+    private string _lastValidShutdownTime = "00:00";
+    private bool _loadingSettings;
+    private bool _syncingShutdownTime;
 
     public SettingsForm(AppSettings settings, AppSettings defaultSettings, Action<AppSettings> saveDefaultSettings)
     {
@@ -34,11 +38,13 @@ public sealed class SettingsForm : Form
         _saveDefaultSettings = saveDefaultSettings;
 
         Text = "Windows 定时关机设置";
+        AutoScaleMode = AutoScaleMode.Dpi;
         StartPosition = FormStartPosition.CenterScreen;
         MinimizeBox = false;
-        MaximizeBox = false;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        ClientSize = new Size(900, 600);
+        MaximizeBox = true;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        ClientSize = new Size(980, 660);
+        MinimumSize = new Size(760, 520);
         Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
         BackColor = ShellBack;
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? Icon;
@@ -60,7 +66,8 @@ public sealed class SettingsForm : Form
             ColumnCount = 1,
             RowCount = 5,
             Padding = new Padding(18),
-            BackColor = ShellBack
+            BackColor = ShellBack,
+            AutoScroll = true
         };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -107,8 +114,16 @@ public sealed class SettingsForm : Form
         _shutdownTimeTextBox.BackColor = Color.White;
         _shutdownTimeTextBox.ForeColor = TextMain;
         _shutdownTimeTextBox.TextChanged += (_, _) => UpdateShutdownPreview();
+        _shutdownTimeTextBox.Leave += (_, _) => ApplyShutdownTimeTextChange(updateReminders: true);
+        _shutdownTimePicker.Format = DateTimePickerFormat.Custom;
+        _shutdownTimePicker.CustomFormat = "HH:mm";
+        _shutdownTimePicker.ShowUpDown = true;
+        _shutdownTimePicker.Width = 92;
+        _shutdownTimePicker.Font = new Font(Font.FontFamily, 10F, FontStyle.Regular, GraphicsUnit.Point);
+        _shutdownTimePicker.ValueChanged += (_, _) => ApplyShutdownPickerChange();
         shutdownPanel.Controls.Add(CreateSectionLabel("每日关机时间"));
         shutdownPanel.Controls.Add(_shutdownTimeTextBox);
+        shutdownPanel.Controls.Add(_shutdownTimePicker);
         shutdownPanel.Controls.Add(new Label { Text = "格式 HH:mm；24:00 会保存为 00:00", AutoSize = true, ForeColor = TextMuted, Padding = new Padding(8, 5, 0, 0) });
         root.Controls.Add(shutdownPanel);
 
@@ -132,7 +147,7 @@ public sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             AutoSize = true,
-            WrapContents = false,
+            WrapContents = true,
             BackColor = ShellBack
         };
 
@@ -141,7 +156,7 @@ public sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
             AutoSize = true,
-            WrapContents = false,
+            WrapContents = true,
             BackColor = ShellBack
         };
 
@@ -217,8 +232,10 @@ public sealed class SettingsForm : Form
     {
         var header = new TableLayoutPanel
         {
-            Dock = DockStyle.Top,
-            Height = 96,
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(0, 108),
             ColumnCount = 2,
             RowCount = 1,
             BackColor = Primary,
@@ -232,35 +249,36 @@ public sealed class SettingsForm : Form
         var copy = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            AutoSize = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 1,
             RowCount = 2,
             BackColor = Primary,
             Margin = new Padding(0)
         };
-        copy.RowStyles.Add(new RowStyle(SizeType.Percent, 60));
-        copy.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
+        copy.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        copy.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var title = new Label
         {
             Text = "Windows 定时关机",
-            Dock = DockStyle.Fill,
-            AutoSize = false,
+            Dock = DockStyle.Top,
+            AutoSize = true,
             Font = new Font(Font.FontFamily, 17F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = Color.White,
-            TextAlign = ContentAlignment.BottomLeft,
+            TextAlign = ContentAlignment.MiddleLeft,
             Margin = new Padding(0)
         };
 
         var subtitle = new Label
         {
             Text = "每日提醒、语音倒计时、到点自动关机",
-            Dock = DockStyle.Fill,
-            AutoSize = false,
+            Dock = DockStyle.Top,
+            AutoSize = true,
             Font = new Font(Font.FontFamily, 9.5F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = Color.FromArgb(219, 234, 254),
-            TextAlign = ContentAlignment.TopLeft,
-            Margin = new Padding(1, 2, 0, 0)
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(1, 6, 0, 0)
         };
 
         var shutdownPreview = new TableLayoutPanel
@@ -402,15 +420,16 @@ public sealed class SettingsForm : Form
         };
 
         _remindersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Id", Name = "Id", Visible = false });
-        _remindersGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "启用", Name = "Enabled", FillWeight = 45 });
-        _remindersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "提醒时间", Name = "Time", FillWeight = 70 });
-        _remindersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "提醒文案", Name = "Message", FillWeight = 260 });
-        _remindersGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "语音", Name = "Speak", FillWeight = 45 });
-        _remindersGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "通知", Name = "Toast", FillWeight = 45 });
+        _remindersGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "启用", Name = "Enabled", FillWeight = 45, MinimumWidth = 72 });
+        _remindersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "提醒时间", Name = "Time", FillWeight = 70, MinimumWidth = 116 });
+        _remindersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "提醒文案", Name = "Message", FillWeight = 260, MinimumWidth = 300 });
+        _remindersGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "语音", Name = "Speak", FillWeight = 45, MinimumWidth = 72 });
+        _remindersGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "通知", Name = "Toast", FillWeight = 45, MinimumWidth = 72 });
     }
 
     private void LoadSettings()
     {
+        _loadingSettings = true;
         _enabledCheckBox.Checked = Settings.Enabled;
         _autoShutdownCheckBox.Checked = Settings.AutoShutdown;
         _forceShutdownCheckBox.Checked = Settings.ForceShutdown;
@@ -418,7 +437,11 @@ public sealed class SettingsForm : Form
         _shutdownTimeTextBox.Text = Settings.ShutdownTime;
         _shutdownTimeBadge.Text = Settings.ShutdownTime;
         LoadReminderRows();
+        SyncShutdownPicker(Settings.ShutdownTime);
+        _lastValidShutdownTime = Settings.ShutdownTime;
         UpdateShutdownPreview();
+        SetStatus("");
+        _loadingSettings = false;
     }
 
     private void LoadReminderRows()
@@ -430,8 +453,113 @@ public sealed class SettingsForm : Form
         }
     }
 
+    private void ApplyShutdownPickerChange()
+    {
+        if (_syncingShutdownTime || _loadingSettings)
+        {
+            return;
+        }
+
+        var selectedTime = _shutdownTimePicker.Value.ToString("HH:mm");
+        _syncingShutdownTime = true;
+        _shutdownTimeTextBox.Text = selectedTime;
+        _syncingShutdownTime = false;
+        ApplyShutdownTimeChange(selectedTime, updateReminders: true);
+    }
+
+    private void ApplyShutdownTimeTextChange(bool updateReminders)
+    {
+        if (_syncingShutdownTime || _loadingSettings)
+        {
+            return;
+        }
+
+        try
+        {
+            var normalized = TimeOfDayParser.Normalize(_shutdownTimeTextBox.Text);
+            _syncingShutdownTime = true;
+            _shutdownTimeTextBox.Text = normalized;
+            SyncShutdownPicker(normalized);
+            _syncingShutdownTime = false;
+            ApplyShutdownTimeChange(normalized, updateReminders);
+        }
+        catch
+        {
+            UpdateShutdownPreview();
+        }
+    }
+
+    private void ApplyShutdownTimeChange(string newShutdownTime, bool updateReminders)
+    {
+        if (newShutdownTime == _lastValidShutdownTime)
+        {
+            UpdateShutdownPreview();
+            return;
+        }
+
+        if (updateReminders)
+        {
+            ShiftReminderRows(_lastValidShutdownTime, newShutdownTime);
+        }
+
+        _lastValidShutdownTime = newShutdownTime;
+        SetStatus("已根据关机时间更新提醒");
+        UpdateShutdownPreview();
+    }
+
+    private void SyncShutdownPicker(string shutdownTime)
+    {
+        var parsed = TimeOfDayParser.Parse(shutdownTime);
+        _syncingShutdownTime = true;
+        _shutdownTimePicker.Value = DateTime.Today.Add(parsed);
+        _syncingShutdownTime = false;
+    }
+
+    private void ShiftReminderRows(string oldShutdownTime, string newShutdownTime)
+    {
+        var reminders = new List<ReminderSettings>();
+
+        foreach (DataGridViewRow row in _remindersGrid.Rows)
+        {
+            if (row.IsNewRow)
+            {
+                continue;
+            }
+
+            var reminder = new ReminderSettings
+            {
+                Id = Convert.ToString(row.Cells["Id"].Value) ?? "",
+                Time = Convert.ToString(row.Cells["Time"].Value) ?? "",
+                Message = Convert.ToString(row.Cells["Message"].Value) ?? "",
+                Enabled = Convert.ToBoolean(row.Cells["Enabled"].Value ?? true),
+                Speak = Convert.ToBoolean(row.Cells["Speak"].Value ?? true),
+                Toast = Convert.ToBoolean(row.Cells["Toast"].Value ?? true)
+            };
+
+            reminders.Add(reminder);
+        }
+
+        try
+        {
+            ReminderScheduleHelper.ShiftRemindersForShutdownChange(oldShutdownTime, newShutdownTime, reminders);
+        }
+        catch
+        {
+            SetStatus("提醒时间格式待修正，未自动更新提醒");
+            return;
+        }
+
+        _remindersGrid.Rows.Clear();
+        foreach (var reminder in reminders)
+        {
+            _remindersGrid.Rows.Add(reminder.Id, reminder.Enabled, reminder.Time, reminder.Message, reminder.Speak, reminder.Toast);
+        }
+    }
+
     private bool TrySave()
     {
+        ApplyShutdownTimeTextChange(updateReminders: true);
+
         if (!TryReadCurrentSettings(out var next))
         {
             return false;

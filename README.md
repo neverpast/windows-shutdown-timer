@@ -8,6 +8,9 @@ Defaults:
 - 23:55: voice + Windows notification, "还有5分钟自动关机"
 - 00:00: voice countdown from 10 to 1, then normal shutdown with `shutdown.exe /s /t 0`
 - The settings window shows the remaining time until the next scheduled shutdown.
+- The settings window can be resized manually.
+- Shutdown time can be edited by typing or by using the time picker.
+- When shutdown time changes, existing reminder times and messages are shifted automatically by their original offsets.
 
 The app does not force-close applications by default. Unsaved documents can block shutdown.
 

@@ -9,7 +9,9 @@ var tests = new (string Name, Action Test)[]
     ("shutdown args default stays non-force", DefaultForceShutdownIsFalse),
     ("default settings restore midnight shutdown", DefaultSettingsRestoreMidnightShutdown),
     ("settings clone is independent", SettingsCloneIsIndependent),
-    ("defaults store path uses defaults json", DefaultsStorePathUsesDefaultsJson)
+    ("defaults store path uses defaults json", DefaultsStorePathUsesDefaultsJson),
+    ("reminders shift with shutdown time", RemindersShiftWithShutdownTime),
+    ("reminders shift across midnight", RemindersShiftAcrossMidnight)
 };
 
 var failed = 0;
@@ -116,6 +118,38 @@ static void SettingsCloneIsIndependent()
 static void DefaultsStorePathUsesDefaultsJson()
 {
     True(SettingsStore.GetDefaultSettingsFilePath().EndsWith("defaults.json", StringComparison.OrdinalIgnoreCase));
+}
+
+static void RemindersShiftWithShutdownTime()
+{
+    var reminders = new List<ReminderSettings>
+    {
+        new() { Time = "00:55", Message = "还有5分钟自动关机" },
+        new() { Time = "00:58", Message = "还有2分钟自动关机" }
+    };
+
+    ReminderScheduleHelper.ShiftRemindersForShutdownChange("01:00", "02:30", reminders);
+
+    Equal("02:25", reminders[0].Time);
+    Equal("还有5分钟自动关机", reminders[0].Message);
+    Equal("02:28", reminders[1].Time);
+    Equal("还有2分钟自动关机", reminders[1].Message);
+}
+
+static void RemindersShiftAcrossMidnight()
+{
+    var reminders = new List<ReminderSettings>
+    {
+        new() { Time = "23:45", Message = "还有15分钟自动关机" },
+        new() { Time = "23:55", Message = "还有5分钟自动关机" }
+    };
+
+    ReminderScheduleHelper.ShiftRemindersForShutdownChange("00:00", "01:00", reminders);
+
+    Equal("00:45", reminders[0].Time);
+    Equal("还有15分钟自动关机", reminders[0].Message);
+    Equal("00:55", reminders[1].Time);
+    Equal("还有5分钟自动关机", reminders[1].Message);
 }
 
 static void Equal<T>(T expected, T actual)
