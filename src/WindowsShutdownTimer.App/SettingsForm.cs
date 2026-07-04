@@ -83,14 +83,14 @@ public sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 5,
-            Padding = new Padding(18),
+            Padding = new Padding(18, 18, 18, 12),
             BackColor = ShellBack,
             AutoScroll = true
         };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         Controls.Add(root);
         root.Controls.Add(CreateHeaderPanel());
@@ -145,7 +145,7 @@ public sealed class SettingsForm : Form
             ColumnCount = 2,
             RowCount = 1,
             AutoSize = true,
-            Padding = new Padding(0, 12, 0, 0),
+            Padding = new Padding(0, 8, 0, 0),
             BackColor = ShellBack
         };
         bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -201,7 +201,11 @@ public sealed class SettingsForm : Form
         };
 
         var addButton = CreateBottomButton("添加", 96, ButtonTone.Accent);
-        addButton.Click += (_, _) => _remindersGrid.Rows.Add(Guid.NewGuid().ToString("N"), true, "23:45", "还有15分钟自动关机", true, true);
+        addButton.Click += (_, _) =>
+        {
+            AddReminderRow(Guid.NewGuid().ToString("N"), true, 5, _shutdownTimePicker.Value.ToString("HH:mm"), true, true);
+            SetStatus("已添加提前 5 分钟提醒");
+        };
 
         var deleteButton = CreateBottomButton("删除", 96, ButtonTone.Danger);
         deleteButton.Click += (_, _) =>
@@ -427,10 +431,39 @@ public sealed class SettingsForm : Form
 
         _remindersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Id", Name = "Id", Visible = false });
         _remindersGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "启用", Name = "Enabled", FillWeight = 45, MinimumWidth = 72 });
-        _remindersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "提醒时间", Name = "Time", FillWeight = 70, MinimumWidth = 116 });
-        _remindersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "提醒文案", Name = "Message", FillWeight = 260, MinimumWidth = 300 });
+        _remindersGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "提前(分钟)",
+            Name = "LeadMinutes",
+            FillWeight = 72,
+            MinimumWidth = 128,
+            ValueType = typeof(int),
+            DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter }
+        });
+        _remindersGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "提醒时刻",
+            Name = "Time",
+            FillWeight = 70,
+            MinimumWidth = 116,
+            ReadOnly = true,
+            DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter }
+        });
+        _remindersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "提醒文案", Name = "Message", FillWeight = 220, MinimumWidth = 260, ReadOnly = true });
         _remindersGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "语音", Name = "Speak", FillWeight = 45, MinimumWidth = 72 });
         _remindersGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "通知", Name = "Toast", FillWeight = 45, MinimumWidth = 72 });
+        _remindersGrid.CellEndEdit += (_, e) =>
+        {
+            if (_loadingSettings || e.RowIndex < 0 || e.ColumnIndex < 0)
+            {
+                return;
+            }
+
+            if (_remindersGrid.Columns[e.ColumnIndex].Name == "LeadMinutes")
+            {
+                TryRefreshReminderRow(_remindersGrid.Rows[e.RowIndex], _shutdownTimePicker.Value.ToString("HH:mm"));
+            }
+        };
     }
 
     private void LoadSettings()
@@ -454,7 +487,11 @@ public sealed class SettingsForm : Form
         _remindersGrid.Rows.Clear();
         foreach (var reminder in Settings.Reminders)
         {
-            _remindersGrid.Rows.Add(reminder.Id, reminder.Enabled, reminder.Time, reminder.Message, reminder.Speak, reminder.Toast);
+            var leadMinutes = reminder.LeadMinutes ?? ReminderScheduleHelper.MinutesUntil(
+                TimeOfDayParser.Parse(reminder.Time),
+                TimeOfDayParser.Parse(Settings.ShutdownTime));
+
+            AddReminderRow(reminder.Id, reminder.Enabled, leadMinutes, Settings.ShutdownTime, reminder.Speak, reminder.Toast);
         }
     }
 
@@ -479,11 +516,18 @@ public sealed class SettingsForm : Form
 
         if (updateReminders)
         {
-            ShiftReminderRows(_lastValidShutdownTime, newShutdownTime);
+            try
+            {
+                RefreshReminderRowsForShutdownTime(newShutdownTime);
+                SetStatus("已根据关机时间更新提醒");
+            }
+            catch (Exception ex)
+            {
+                SetStatus(ex.Message);
+            }
         }
 
         _lastValidShutdownTime = newShutdownTime;
-        SetStatus("已根据关机时间更新提醒");
         UpdateShutdownPreview();
     }
 
@@ -495,10 +539,8 @@ public sealed class SettingsForm : Form
         _syncingShutdownTime = false;
     }
 
-    private void ShiftReminderRows(string oldShutdownTime, string newShutdownTime)
+    private void RefreshReminderRowsForShutdownTime(string shutdownTime)
     {
-        var reminders = new List<ReminderSettings>();
-
         foreach (DataGridViewRow row in _remindersGrid.Rows)
         {
             if (row.IsNewRow)
@@ -506,34 +548,34 @@ public sealed class SettingsForm : Form
                 continue;
             }
 
-            var reminder = new ReminderSettings
-            {
-                Id = Convert.ToString(row.Cells["Id"].Value) ?? "",
-                Time = Convert.ToString(row.Cells["Time"].Value) ?? "",
-                Message = Convert.ToString(row.Cells["Message"].Value) ?? "",
-                Enabled = Convert.ToBoolean(row.Cells["Enabled"].Value ?? true),
-                Speak = Convert.ToBoolean(row.Cells["Speak"].Value ?? true),
-                Toast = Convert.ToBoolean(row.Cells["Toast"].Value ?? true)
-            };
-
-            reminders.Add(reminder);
+            RefreshReminderRow(row, shutdownTime);
         }
+    }
 
+    private void AddReminderRow(string id, bool enabled, int leadMinutes, string shutdownTime, bool speak, bool toast)
+    {
+        var rowIndex = _remindersGrid.Rows.Add(id, enabled, leadMinutes, "", "", speak, toast);
+        RefreshReminderRow(_remindersGrid.Rows[rowIndex], shutdownTime);
+    }
+
+    private void TryRefreshReminderRow(DataGridViewRow row, string shutdownTime)
+    {
         try
         {
-            ReminderScheduleHelper.ShiftRemindersForShutdownChange(oldShutdownTime, newShutdownTime, reminders);
+            RefreshReminderRow(row, shutdownTime);
+            SetStatus("已更新提醒时刻和文案");
         }
-        catch
+        catch (Exception ex)
         {
-            SetStatus("提醒时间格式待修正，未自动更新提醒");
-            return;
+            SetStatus(ex.Message);
         }
+    }
 
-        _remindersGrid.Rows.Clear();
-        foreach (var reminder in reminders)
-        {
-            _remindersGrid.Rows.Add(reminder.Id, reminder.Enabled, reminder.Time, reminder.Message, reminder.Speak, reminder.Toast);
-        }
+    private static void RefreshReminderRow(DataGridViewRow row, string shutdownTime)
+    {
+        var leadMinutes = ReadLeadMinutes(row);
+        row.Cells["Time"].Value = ReminderScheduleHelper.GetReminderTime(shutdownTime, leadMinutes);
+        row.Cells["Message"].Value = ReminderScheduleHelper.BuildReminderMessage(leadMinutes);
     }
 
     private bool TrySave()
@@ -586,22 +628,17 @@ public sealed class SettingsForm : Form
                 continue;
             }
 
-            var time = Convert.ToString(row.Cells["Time"].Value) ?? "";
-            var message = Convert.ToString(row.Cells["Message"].Value) ?? "";
+            var leadMinutes = ReadLeadMinutes(row);
             var reminder = new ReminderSettings
             {
                 Id = Convert.ToString(row.Cells["Id"].Value) ?? "",
-                Time = TimeOfDayParser.Normalize(time),
-                Message = message.Trim(),
+                LeadMinutes = leadMinutes,
+                Time = ReminderScheduleHelper.GetReminderTime(_shutdownTimePicker.Value.ToString("HH:mm"), leadMinutes),
+                Message = ReminderScheduleHelper.BuildReminderMessage(leadMinutes),
                 Enabled = Convert.ToBoolean(row.Cells["Enabled"].Value ?? true),
                 Speak = Convert.ToBoolean(row.Cells["Speak"].Value ?? true),
                 Toast = Convert.ToBoolean(row.Cells["Toast"].Value ?? true)
             };
-
-            if (string.IsNullOrWhiteSpace(reminder.Message))
-            {
-                throw new InvalidOperationException("提醒文案不能为空。");
-            }
 
             reminders.Add(reminder);
         }
@@ -612,6 +649,17 @@ public sealed class SettingsForm : Form
         }
 
         return reminders;
+    }
+
+    private static int ReadLeadMinutes(DataGridViewRow row)
+    {
+        var raw = Convert.ToString(row.Cells["LeadMinutes"].Value)?.Trim();
+        if (!int.TryParse(raw, out var leadMinutes) || !ReminderScheduleHelper.IsValidLeadMinutes(leadMinutes))
+        {
+            throw new InvalidOperationException("提前提醒时间必须是 1 到 1439 之间的整数分钟。");
+        }
+
+        return leadMinutes;
     }
 
     private static AppSettings Clone(AppSettings settings) => settings.Clone();

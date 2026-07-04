@@ -24,6 +24,7 @@ public sealed class AppSettings
                 .Select(r => new ReminderSettings
                 {
                     Id = r.Id,
+                    LeadMinutes = r.LeadMinutes,
                     Time = r.Time,
                     Message = r.Message,
                     Speak = r.Speak,
@@ -45,7 +46,7 @@ public sealed class AppSettings
 
         foreach (var reminder in Reminders)
         {
-            reminder.Normalize();
+            reminder.Normalize(ShutdownTime);
         }
     }
 
@@ -53,7 +54,8 @@ public sealed class AppSettings
     [
         new ReminderSettings
         {
-            Id = "reminder-2345",
+            Id = "reminder-15",
+            LeadMinutes = 15,
             Time = "23:45",
             Message = "还有15分钟自动关机",
             Speak = true,
@@ -62,9 +64,20 @@ public sealed class AppSettings
         },
         new ReminderSettings
         {
-            Id = "reminder-2355",
+            Id = "reminder-5",
+            LeadMinutes = 5,
             Time = "23:55",
             Message = "还有5分钟自动关机",
+            Speak = true,
+            Toast = true,
+            Enabled = true
+        },
+        new ReminderSettings
+        {
+            Id = "reminder-1",
+            LeadMinutes = 1,
+            Time = "23:59",
+            Message = "还有1分钟自动关机",
             Speak = true,
             Toast = true,
             Enabled = true

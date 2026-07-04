@@ -10,8 +10,8 @@ var tests = new (string Name, Action Test)[]
     ("default settings restore midnight shutdown", DefaultSettingsRestoreMidnightShutdown),
     ("settings clone is independent", SettingsCloneIsIndependent),
     ("defaults store path uses defaults json", DefaultsStorePathUsesDefaultsJson),
-    ("reminders shift with shutdown time", RemindersShiftWithShutdownTime),
-    ("reminders shift across midnight", RemindersShiftAcrossMidnight)
+    ("reminders follow lead minutes", RemindersFollowLeadMinutes),
+    ("legacy reminder times infer lead minutes", LegacyReminderTimesInferLeadMinutes)
 };
 
 var failed = 0;
@@ -99,8 +99,16 @@ static void DefaultForceShutdownIsFalse()
 static void DefaultSettingsRestoreMidnightShutdown()
 {
     var defaults = AppSettings.CreateDefault();
+    defaults.Normalize();
+
     Equal("00:00", defaults.ShutdownTime);
-    Equal(2, defaults.Reminders.Count);
+    Equal(3, defaults.Reminders.Count);
+    Equal(15, defaults.Reminders[0].LeadMinutes.GetValueOrDefault());
+    Equal("23:45", defaults.Reminders[0].Time);
+    Equal(5, defaults.Reminders[1].LeadMinutes.GetValueOrDefault());
+    Equal("23:55", defaults.Reminders[1].Time);
+    Equal(1, defaults.Reminders[2].LeadMinutes.GetValueOrDefault());
+    Equal("23:59", defaults.Reminders[2].Time);
 }
 
 static void SettingsCloneIsIndependent()
@@ -120,36 +128,45 @@ static void DefaultsStorePathUsesDefaultsJson()
     True(SettingsStore.GetDefaultSettingsFilePath().EndsWith("defaults.json", StringComparison.OrdinalIgnoreCase));
 }
 
-static void RemindersShiftWithShutdownTime()
+static void RemindersFollowLeadMinutes()
 {
     var reminders = new List<ReminderSettings>
     {
-        new() { Time = "00:55", Message = "还有5分钟自动关机" },
-        new() { Time = "00:58", Message = "还有2分钟自动关机" }
+        new() { LeadMinutes = 5 },
+        new() { LeadMinutes = 2 }
     };
 
     ReminderScheduleHelper.ShiftRemindersForShutdownChange("01:00", "02:30", reminders);
 
+    Equal(5, reminders[0].LeadMinutes.GetValueOrDefault());
     Equal("02:25", reminders[0].Time);
     Equal("还有5分钟自动关机", reminders[0].Message);
+    Equal(2, reminders[1].LeadMinutes.GetValueOrDefault());
     Equal("02:28", reminders[1].Time);
     Equal("还有2分钟自动关机", reminders[1].Message);
+    Equal("00:55", ReminderScheduleHelper.GetReminderTime("01:00", 5));
 }
 
-static void RemindersShiftAcrossMidnight()
+static void LegacyReminderTimesInferLeadMinutes()
 {
-    var reminders = new List<ReminderSettings>
+    var settings = new AppSettings
     {
-        new() { Time = "23:45", Message = "还有15分钟自动关机" },
-        new() { Time = "23:55", Message = "还有5分钟自动关机" }
+        ShutdownTime = "00:00",
+        Reminders =
+        [
+            new ReminderSettings { Time = "23:45", Message = "旧文案" },
+            new ReminderSettings { Time = "23:55", Message = "旧文案" }
+        ]
     };
 
-    ReminderScheduleHelper.ShiftRemindersForShutdownChange("00:00", "01:00", reminders);
+    settings.Normalize();
 
-    Equal("00:45", reminders[0].Time);
-    Equal("还有15分钟自动关机", reminders[0].Message);
-    Equal("00:55", reminders[1].Time);
-    Equal("还有5分钟自动关机", reminders[1].Message);
+    Equal(15, settings.Reminders[0].LeadMinutes.GetValueOrDefault());
+    Equal("23:45", settings.Reminders[0].Time);
+    Equal("还有15分钟自动关机", settings.Reminders[0].Message);
+    Equal(5, settings.Reminders[1].LeadMinutes.GetValueOrDefault());
+    Equal("23:55", settings.Reminders[1].Time);
+    Equal("还有5分钟自动关机", settings.Reminders[1].Message);
 }
 
 static void Equal<T>(T expected, T actual)

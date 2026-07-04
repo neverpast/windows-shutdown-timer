@@ -14,18 +14,44 @@ public static class ReminderScheduleHelper
 
         foreach (var reminder in reminders)
         {
-            var oldReminder = TimeOfDayParser.Parse(reminder.Time);
-            var offsetMinutes = MinutesUntil(oldReminder, oldShutdown);
-            var newReminder = NormalizeMinutes((int)newShutdown.TotalMinutes - offsetMinutes);
+            var offsetMinutes = reminder.LeadMinutes
+                ?? MinutesUntil(TimeOfDayParser.Parse(reminder.Time), oldShutdown);
 
-            reminder.Time = FormatMinutes(newReminder);
-            reminder.Message = $"还有{FormatOffset(offsetMinutes)}自动关机";
+            reminder.LeadMinutes = offsetMinutes;
+            reminder.Time = GetReminderTime(newShutdown, offsetMinutes);
+            reminder.Message = BuildReminderMessage(offsetMinutes);
         }
+    }
+
+    public static string GetReminderTime(string shutdownTime, int leadMinutes)
+    {
+        return GetReminderTime(TimeOfDayParser.Parse(shutdownTime), leadMinutes);
+    }
+
+    public static string BuildReminderMessage(int leadMinutes)
+    {
+        return $"还有{FormatOffset(leadMinutes)}自动关机";
     }
 
     public static int MinutesUntil(TimeSpan from, TimeSpan to)
     {
         return NormalizeMinutes((int)to.TotalMinutes - (int)from.TotalMinutes);
+    }
+
+    public static bool IsValidLeadMinutes(int leadMinutes)
+    {
+        return leadMinutes > 0 && leadMinutes < MinutesPerDay;
+    }
+
+    private static string GetReminderTime(TimeSpan shutdownTime, int leadMinutes)
+    {
+        if (!IsValidLeadMinutes(leadMinutes))
+        {
+            throw new ArgumentOutOfRangeException(nameof(leadMinutes), "提前提醒时间必须在 1 到 1439 分钟之间。");
+        }
+
+        var reminderMinutes = NormalizeMinutes((int)shutdownTime.TotalMinutes - leadMinutes);
+        return FormatMinutes(reminderMinutes);
     }
 
     private static int NormalizeMinutes(int minutes)
@@ -41,7 +67,7 @@ public static class ReminderScheduleHelper
         return $"{hour:00}:{minute:00}";
     }
 
-    private static string FormatOffset(int minutes)
+    public static string FormatOffset(int minutes)
     {
         if (minutes <= 0)
         {
