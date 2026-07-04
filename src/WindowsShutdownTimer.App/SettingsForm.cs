@@ -43,7 +43,7 @@ public sealed class SettingsForm : Form
         MaximizeBox = true;
         FormBorderStyle = FormBorderStyle.Sizable;
         ClientSize = new Size(980, 660);
-        MinimumSize = new Size(760, 520);
+        MinimumSize = new Size(760, 500);
         Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
         BackColor = ShellBack;
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? Icon;
@@ -90,7 +90,7 @@ public sealed class SettingsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         Controls.Add(root);
         root.Controls.Add(CreateHeaderPanel());
@@ -240,7 +240,7 @@ public sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            MinimumSize = new Size(0, 108),
+            MinimumSize = new Size(0, 116),
             ColumnCount = 2,
             RowCount = 1,
             BackColor = Primary,
@@ -293,7 +293,7 @@ public sealed class SettingsForm : Form
             ColumnCount = 1,
             RowCount = 2,
             BackColor = Primary,
-            Margin = new Padding(18, 2, 0, 2),
+            Margin = new Padding(18, 2, 0, 0),
             Anchor = AnchorStyles.Right
         };
         shutdownPreview.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -314,8 +314,8 @@ public sealed class SettingsForm : Form
         _timeUntilShutdownLabel.Font = new Font(Font.FontFamily, 8.5F, FontStyle.Regular, GraphicsUnit.Point);
         _timeUntilShutdownLabel.ForeColor = Color.FromArgb(219, 234, 254);
         _timeUntilShutdownLabel.BackColor = Primary;
-        _timeUntilShutdownLabel.Size = new Size(180, 20);
-        _timeUntilShutdownLabel.MinimumSize = new Size(180, 20);
+        _timeUntilShutdownLabel.Size = new Size(190, 28);
+        _timeUntilShutdownLabel.MinimumSize = new Size(190, 28);
         _timeUntilShutdownLabel.Margin = new Padding(0);
 
         shutdownPreview.Controls.Add(_shutdownTimeBadge, 0, 0);
@@ -388,6 +388,7 @@ public sealed class SettingsForm : Form
     private void ConfigureGrid()
     {
         _remindersGrid.Dock = DockStyle.Fill;
+        _remindersGrid.MinimumSize = new Size(0, 120);
         _remindersGrid.AllowUserToAddRows = false;
         _remindersGrid.AllowUserToResizeRows = false;
         _remindersGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
