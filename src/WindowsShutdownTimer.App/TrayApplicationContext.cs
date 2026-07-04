@@ -17,6 +17,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private AppSettings _settings;
     private ToolStripMenuItem _pauseItem = null!;
     private ToolStripMenuItem _resumeItem = null!;
+    private SettingsForm? _settingsForm;
     private bool _shutdownCountdownRunning;
 
     public TrayApplicationContext(
@@ -70,19 +71,36 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void OpenSettings()
     {
-        using var form = new SettingsForm(
-            _settings,
-            _defaultSettingsStore.Load(),
-            defaults => _defaultSettingsStore.Save(defaults));
-        if (form.ShowDialog() != DialogResult.OK)
+        if (_settingsForm is not null && !_settingsForm.IsDisposed)
         {
+            _settingsForm.RestoreFromTray();
             return;
         }
 
-        _settings = form.Settings;
-        _settingsStore.Save(_settings);
-        ApplyStartup();
-        UpdatePauseMenu();
+        var form = new SettingsForm(
+            _settings,
+            _defaultSettingsStore.Load(),
+            defaults => _defaultSettingsStore.Save(defaults));
+        _settingsForm = form;
+        form.FormClosed += (_, _) =>
+        {
+            if (form.DialogResult == DialogResult.OK)
+            {
+                _settings = form.Settings;
+                _settingsStore.Save(_settings);
+                ApplyStartup();
+                UpdatePauseMenu();
+            }
+
+            if (ReferenceEquals(_settingsForm, form))
+            {
+                _settingsForm = null;
+            }
+
+            form.Dispose();
+        };
+        form.Show();
+        form.Activate();
     }
 
     private void PauseTonight()
@@ -208,6 +226,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         if (disposing)
         {
             _timer.Dispose();
+            _settingsForm?.Dispose();
             _notifyIcon.Dispose();
             _notificationService.Dispose();
             _speechService.Dispose();

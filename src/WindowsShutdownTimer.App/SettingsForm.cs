@@ -18,7 +18,6 @@ public sealed class SettingsForm : Form
     private readonly CheckBox _autoShutdownCheckBox = new() { Text = "到点自动关机", AutoSize = true };
     private readonly CheckBox _forceShutdownCheckBox = new() { Text = "强制关闭应用（可能丢失未保存内容）", AutoSize = true };
     private readonly CheckBox _startWithWindowsCheckBox = new() { Text = "登录 Windows 后自动启动", AutoSize = true };
-    private readonly TextBox _shutdownTimeTextBox = new() { Width = 80 };
     private readonly DateTimePicker _shutdownTimePicker = new();
     private readonly DataGridView _remindersGrid = new();
     private readonly Label _shutdownTimeBadge = new();
@@ -40,7 +39,7 @@ public sealed class SettingsForm : Form
         Text = "Windows 定时关机设置";
         AutoScaleMode = AutoScaleMode.Dpi;
         StartPosition = FormStartPosition.CenterScreen;
-        MinimizeBox = false;
+        MinimizeBox = true;
         MaximizeBox = true;
         FormBorderStyle = FormBorderStyle.Sizable;
         ClientSize = new Size(980, 660);
@@ -57,6 +56,25 @@ public sealed class SettingsForm : Form
     }
 
     public AppSettings Settings { get; private set; }
+
+    public void RestoreFromTray()
+    {
+        ShowInTaskbar = true;
+        Show();
+        WindowState = FormWindowState.Normal;
+        Activate();
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+
+        if (WindowState == FormWindowState.Minimized)
+        {
+            ShowInTaskbar = false;
+            Hide();
+        }
+    }
 
     private void BuildLayout()
     {
@@ -107,24 +125,15 @@ public sealed class SettingsForm : Form
             Padding = new Padding(12, 10, 12, 10),
             Margin = new Padding(0, 10, 0, 10)
         };
-        _shutdownTimeTextBox.Width = 96;
-        _shutdownTimeTextBox.Height = 30;
-        _shutdownTimeTextBox.Font = new Font(Font.FontFamily, 10F, FontStyle.Regular, GraphicsUnit.Point);
-        _shutdownTimeTextBox.BorderStyle = BorderStyle.FixedSingle;
-        _shutdownTimeTextBox.BackColor = Color.White;
-        _shutdownTimeTextBox.ForeColor = TextMain;
-        _shutdownTimeTextBox.TextChanged += (_, _) => UpdateShutdownPreview();
-        _shutdownTimeTextBox.Leave += (_, _) => ApplyShutdownTimeTextChange(updateReminders: true);
         _shutdownTimePicker.Format = DateTimePickerFormat.Custom;
         _shutdownTimePicker.CustomFormat = "HH:mm";
         _shutdownTimePicker.ShowUpDown = true;
-        _shutdownTimePicker.Width = 92;
+        _shutdownTimePicker.Width = 120;
         _shutdownTimePicker.Font = new Font(Font.FontFamily, 10F, FontStyle.Regular, GraphicsUnit.Point);
         _shutdownTimePicker.ValueChanged += (_, _) => ApplyShutdownPickerChange();
         shutdownPanel.Controls.Add(CreateSectionLabel("每日关机时间"));
-        shutdownPanel.Controls.Add(_shutdownTimeTextBox);
         shutdownPanel.Controls.Add(_shutdownTimePicker);
-        shutdownPanel.Controls.Add(new Label { Text = "格式 HH:mm；24:00 会保存为 00:00", AutoSize = true, ForeColor = TextMuted, Padding = new Padding(8, 5, 0, 0) });
+        shutdownPanel.Controls.Add(new Label { Text = "使用上下按钮选择时间", AutoSize = true, ForeColor = TextMuted, Padding = new Padding(8, 5, 0, 0) });
         root.Controls.Add(shutdownPanel);
 
         ConfigureGrid();
@@ -170,9 +179,7 @@ public sealed class SettingsForm : Form
             }
         };
 
-        var cancelButton = CreateBottomButton("取消", 112, ButtonTone.Secondary);
-        cancelButton.DialogResult = DialogResult.Cancel;
-        var restoreDefaultsButton = CreateBottomButton("恢复默认", 124, ButtonTone.Secondary);
+        var restoreDefaultsButton = CreateBottomButton("恢复默认", 160, ButtonTone.Secondary);
         restoreDefaultsButton.Click += (_, _) =>
         {
             Settings = Clone(_defaultSettings);
@@ -180,7 +187,7 @@ public sealed class SettingsForm : Form
             SetStatus("已恢复默认设置");
         };
 
-        var saveDefaultsButton = CreateBottomButton("设为默认", 124, ButtonTone.Secondary);
+        var saveDefaultsButton = CreateBottomButton("设为默认", 160, ButtonTone.Secondary);
         saveDefaultsButton.Click += (_, _) =>
         {
             if (!TryReadCurrentSettings(out var next))
@@ -219,13 +226,11 @@ public sealed class SettingsForm : Form
         editButtons.Controls.Add(deleteButton);
         editButtons.Controls.Add(_statusLabel);
         commitButtons.Controls.Add(saveButton);
-        commitButtons.Controls.Add(cancelButton);
         bottom.Controls.Add(editButtons, 0, 0);
         bottom.Controls.Add(commitButtons, 1, 0);
         root.Controls.Add(bottom);
 
         AcceptButton = saveButton;
-        CancelButton = cancelButton;
     }
 
     private Control CreateHeaderPanel()
@@ -434,7 +439,6 @@ public sealed class SettingsForm : Form
         _autoShutdownCheckBox.Checked = Settings.AutoShutdown;
         _forceShutdownCheckBox.Checked = Settings.ForceShutdown;
         _startWithWindowsCheckBox.Checked = Settings.StartWithWindows;
-        _shutdownTimeTextBox.Text = Settings.ShutdownTime;
         _shutdownTimeBadge.Text = Settings.ShutdownTime;
         LoadReminderRows();
         SyncShutdownPicker(Settings.ShutdownTime);
@@ -461,32 +465,7 @@ public sealed class SettingsForm : Form
         }
 
         var selectedTime = _shutdownTimePicker.Value.ToString("HH:mm");
-        _syncingShutdownTime = true;
-        _shutdownTimeTextBox.Text = selectedTime;
-        _syncingShutdownTime = false;
         ApplyShutdownTimeChange(selectedTime, updateReminders: true);
-    }
-
-    private void ApplyShutdownTimeTextChange(bool updateReminders)
-    {
-        if (_syncingShutdownTime || _loadingSettings)
-        {
-            return;
-        }
-
-        try
-        {
-            var normalized = TimeOfDayParser.Normalize(_shutdownTimeTextBox.Text);
-            _syncingShutdownTime = true;
-            _shutdownTimeTextBox.Text = normalized;
-            SyncShutdownPicker(normalized);
-            _syncingShutdownTime = false;
-            ApplyShutdownTimeChange(normalized, updateReminders);
-        }
-        catch
-        {
-            UpdateShutdownPreview();
-        }
     }
 
     private void ApplyShutdownTimeChange(string newShutdownTime, bool updateReminders)
@@ -558,8 +537,6 @@ public sealed class SettingsForm : Form
 
     private bool TrySave()
     {
-        ApplyShutdownTimeTextChange(updateReminders: true);
-
         if (!TryReadCurrentSettings(out var next))
         {
             return false;
@@ -580,7 +557,7 @@ public sealed class SettingsForm : Form
             settings = new AppSettings
             {
                 Enabled = _enabledCheckBox.Checked,
-                ShutdownTime = TimeOfDayParser.Normalize(_shutdownTimeTextBox.Text),
+                ShutdownTime = _shutdownTimePicker.Value.ToString("HH:mm"),
                 AutoShutdown = _autoShutdownCheckBox.Checked,
                 ForceShutdown = _forceShutdownCheckBox.Checked,
                 StartWithWindows = _startWithWindowsCheckBox.Checked,
@@ -642,7 +619,7 @@ public sealed class SettingsForm : Form
     {
         try
         {
-            var shutdownTime = TimeOfDayParser.Normalize(_shutdownTimeTextBox.Text);
+            var shutdownTime = _shutdownTimePicker.Value.ToString("HH:mm");
             _shutdownTimeBadge.Text = shutdownTime;
 
             if (!_autoShutdownCheckBox.Checked)
