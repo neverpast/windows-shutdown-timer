@@ -13,6 +13,9 @@ Defaults:
 - Shutdown time is edited with the time picker.
 - Reminders are edited as "N minutes before shutdown"; the exact reminder time and message are shown automatically.
 - The settings window can be minimized to the tray and reopened from the tray menu or tray icon.
+- Only one tray app instance can run at a time.
+- If a settings file is corrupted, it is backed up as `*.bad.json` and defaults are restored automatically.
+- "Pause tonight shutdown" is persisted in `%AppData%\WindowsShutdownTimer\state.json`.
 
 The app does not force-close applications by default. Unsaved documents can block shutdown.
 
@@ -52,6 +55,12 @@ User defaults saved from the settings window are saved to:
 
 ```text
 %AppData%\WindowsShutdownTimer\defaults.json
+```
+
+Runtime state, including a paused shutdown date, is saved to:
+
+```text
+%AppData%\WindowsShutdownTimer\state.json
 ```
 
 Uninstalling from Windows Settings or the Start menu shortcut removes the installed app files, startup registry entry, and the `%AppData%\WindowsShutdownTimer` settings folder.

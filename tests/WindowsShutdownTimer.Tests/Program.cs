@@ -10,6 +10,8 @@ var tests = new (string Name, Action Test)[]
     ("default settings restore midnight shutdown", DefaultSettingsRestoreMidnightShutdown),
     ("settings clone is independent", SettingsCloneIsIndependent),
     ("defaults store path uses defaults json", DefaultsStorePathUsesDefaultsJson),
+    ("corrupt settings file backs up and restores defaults", CorruptSettingsFileBacksUpAndRestoresDefaults),
+    ("paused shutdown date persists", PausedShutdownDatePersists),
     ("reminders follow lead minutes", RemindersFollowLeadMinutes),
     ("legacy reminder times infer lead minutes", LegacyReminderTimesInferLeadMinutes)
 };
@@ -128,6 +130,54 @@ static void DefaultsStorePathUsesDefaultsJson()
     True(SettingsStore.GetDefaultSettingsFilePath().EndsWith("defaults.json", StringComparison.OrdinalIgnoreCase));
 }
 
+static void CorruptSettingsFileBacksUpAndRestoresDefaults()
+{
+    var directory = CreateTempDirectory();
+    try
+    {
+        var filePath = Path.Combine(directory, "settings.json");
+        File.WriteAllText(filePath, "{ broken json");
+
+        var store = new SettingsStore(filePath);
+        var settings = store.Load();
+
+        Equal("00:00", settings.ShutdownTime);
+        True(File.Exists(Path.Combine(directory, "settings.bad.json")));
+        True(File.ReadAllText(filePath).Contains("\"shutdownTime\": \"00:00\"", StringComparison.OrdinalIgnoreCase));
+    }
+    finally
+    {
+        Directory.Delete(directory, recursive: true);
+    }
+}
+
+static void PausedShutdownDatePersists()
+{
+    var directory = CreateTempDirectory();
+    try
+    {
+        var filePath = Path.Combine(directory, "state.json");
+        var store = new ScheduleStateStore(filePath);
+        var state = new ScheduleState();
+
+        state.PauseShutdownFor(new DateOnly(2026, 7, 5));
+        store.Save(state);
+
+        var loaded = store.Load();
+        True(loaded.IsShutdownPaused(new DateOnly(2026, 7, 5)));
+
+        loaded.ResumeShutdown();
+        store.Save(loaded);
+
+        var resumed = store.Load();
+        False(resumed.IsShutdownPaused(new DateOnly(2026, 7, 5)));
+    }
+    finally
+    {
+        Directory.Delete(directory, recursive: true);
+    }
+}
+
 static void RemindersFollowLeadMinutes()
 {
     var reminders = new List<ReminderSettings>
@@ -206,4 +256,11 @@ static void Throws<TException>(Action action)
     }
 
     throw new InvalidOperationException($"Expected {typeof(TException).Name}.");
+}
+
+static string CreateTempDirectory()
+{
+    var path = Path.Combine(Path.GetTempPath(), $"WindowsShutdownTimerTests-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(path);
+    return path;
 }

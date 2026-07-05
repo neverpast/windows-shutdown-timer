@@ -6,11 +6,12 @@ public sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly SettingsStore _settingsStore;
     private readonly SettingsStore _defaultSettingsStore;
+    private readonly ScheduleStateStore _scheduleStateStore;
     private readonly StartupService _startupService;
     private readonly SpeechReminderService _speechService;
     private readonly WindowsNotificationService _notificationService;
     private readonly ShutdownService _shutdownService;
-    private readonly ScheduleState _scheduleState = new();
+    private readonly ScheduleState _scheduleState;
     private readonly System.Windows.Forms.Timer _timer;
     private readonly NotifyIcon _notifyIcon;
 
@@ -33,7 +34,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         _notificationService = notificationService;
         _shutdownService = shutdownService;
         _defaultSettingsStore = new SettingsStore(SettingsStore.GetDefaultSettingsFilePath());
+        _scheduleStateStore = new ScheduleStateStore();
         _settings = _settingsStore.Load();
+        _scheduleState = _scheduleStateStore.Load();
 
         _notifyIcon = new NotifyIcon
         {
@@ -107,6 +110,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         var nextShutdown = ScheduleEngine.GetNextOccurrence(DateTime.Now, _settings.ShutdownTime);
         _scheduleState.PauseShutdownFor(DateOnly.FromDateTime(nextShutdown));
+        SaveScheduleState();
         UpdatePauseMenu();
         ShowBalloon("定时关机", $"已暂停 {nextShutdown:yyyy-MM-dd HH:mm} 的自动关机。");
     }
@@ -114,6 +118,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void ResumeTonight()
     {
         _scheduleState.ResumeShutdown();
+        SaveScheduleState();
         UpdatePauseMenu();
         ShowBalloon("定时关机", "已恢复自动关机。");
     }
@@ -141,6 +146,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void CheckSchedule()
     {
         IReadOnlyList<DueScheduleEvent> events;
+        var previousPausedDate = _scheduleState.PausedShutdownDate;
+
         try
         {
             events = ScheduleEngine.GetDueEvents(
@@ -153,6 +160,11 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             ShowBalloon("定时关机配置错误", ex.Message);
             return;
+        }
+
+        if (previousPausedDate != _scheduleState.PausedShutdownDate)
+        {
+            SaveScheduleState();
         }
 
         foreach (var dueEvent in events)
@@ -212,6 +224,18 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void ShowBalloon(string title, string message)
     {
         _notifyIcon.ShowBalloonTip(5000, title, message, ToolTipIcon.Info);
+    }
+
+    private void SaveScheduleState()
+    {
+        try
+        {
+            _scheduleStateStore.Save(_scheduleState);
+        }
+        catch
+        {
+            ShowBalloon("定时关机", "保存暂停状态失败，请检查配置目录权限。");
+        }
     }
 
     private void Exit()

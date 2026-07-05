@@ -27,10 +27,20 @@ public sealed class SettingsStore
             return defaults;
         }
 
-        var json = File.ReadAllText(FilePath);
-        var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? AppSettings.CreateDefault();
-        settings.Normalize();
-        return settings;
+        try
+        {
+            var json = File.ReadAllText(FilePath);
+            var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? AppSettings.CreateDefault();
+            settings.Normalize();
+            return settings;
+        }
+        catch
+        {
+            BackupBrokenSettingsFile();
+            var defaults = AppSettings.CreateDefault();
+            Save(defaults);
+            return defaults;
+        }
     }
 
     public void Save(AppSettings settings)
@@ -55,5 +65,28 @@ public sealed class SettingsStore
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         return Path.Combine(appData, "WindowsShutdownTimer", "defaults.json");
+    }
+
+    private void BackupBrokenSettingsFile()
+    {
+        try
+        {
+            if (!File.Exists(FilePath))
+            {
+                return;
+            }
+
+            var directory = Path.GetDirectoryName(FilePath);
+            var fileName = Path.GetFileNameWithoutExtension(FilePath);
+            var backupPath = Path.Combine(
+                string.IsNullOrWhiteSpace(directory) ? "" : directory,
+                $"{fileName}.bad.json");
+
+            File.Copy(FilePath, backupPath, overwrite: true);
+        }
+        catch
+        {
+            // Recovery should still continue even if the backup cannot be written.
+        }
     }
 }
