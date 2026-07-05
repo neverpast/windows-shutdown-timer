@@ -23,7 +23,7 @@ public sealed class SettingsForm : Form
     private readonly Label _shutdownTimeBadge = new();
     private readonly Label _timeUntilShutdownLabel = new();
     private readonly Label _statusLabel = new();
-    private readonly System.Windows.Forms.Timer _previewTimer = new() { Interval = 30_000 };
+    private readonly System.Windows.Forms.Timer _previewTimer = new() { Interval = 1_000 };
     private readonly Action<AppSettings> _saveDefaultSettings;
     private AppSettings _defaultSettings;
     private string _lastValidShutdownTime = "00:00";
@@ -677,8 +677,9 @@ public sealed class SettingsForm : Form
                 return;
             }
 
-            var next = ScheduleEngine.GetNextOccurrence(DateTime.Now, shutdownTime);
-            _timeUntilShutdownLabel.Text = $"还有 {FormatDuration(next - DateTime.Now)}";
+            var now = DateTime.Now;
+            var next = ScheduleEngine.GetNextOccurrence(now, shutdownTime);
+            _timeUntilShutdownLabel.Text = $"还有 {FormatDuration(next - now)}";
         }
         catch
         {
@@ -691,6 +692,12 @@ public sealed class SettingsForm : Form
         if (duration < TimeSpan.Zero)
         {
             duration = TimeSpan.Zero;
+        }
+
+        if (duration < TimeSpan.FromMinutes(1))
+        {
+            var totalSeconds = Math.Max(0, (int)Math.Ceiling(duration.TotalSeconds));
+            return $"{totalSeconds}秒";
         }
 
         var totalMinutes = Math.Max(1, (int)Math.Ceiling(duration.TotalMinutes));
