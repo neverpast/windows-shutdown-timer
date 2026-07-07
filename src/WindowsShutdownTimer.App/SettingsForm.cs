@@ -83,9 +83,8 @@ public sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 5,
-            Padding = new Padding(18, 18, 18, 12),
-            BackColor = ShellBack,
-            AutoScroll = true
+            Padding = new Padding(18, 18, 18, 6),
+            BackColor = ShellBack
         };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -145,7 +144,7 @@ public sealed class SettingsForm : Form
             ColumnCount = 2,
             RowCount = 1,
             AutoSize = true,
-            Padding = new Padding(0, 8, 0, 0),
+            Padding = new Padding(0, 6, 0, 0),
             BackColor = ShellBack
         };
         bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
