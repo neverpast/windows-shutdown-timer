@@ -13,7 +13,11 @@ var tests = new (string Name, Action Test)[]
     ("corrupt settings file backs up and restores defaults", CorruptSettingsFileBacksUpAndRestoresDefaults),
     ("paused shutdown date persists", PausedShutdownDatePersists),
     ("reminders follow lead minutes", RemindersFollowLeadMinutes),
-    ("legacy reminder times infer lead minutes", LegacyReminderTimesInferLeadMinutes)
+    ("legacy reminder times infer lead minutes", LegacyReminderTimesInferLeadMinutes),
+    ("automatic shutdown markers persist and ignore corrupt files", AutomaticShutdownMarkersPersistAndIgnoreCorruptFiles),
+    ("power history matcher marks automatic shutdowns", PowerHistoryMatcherMarksAutomaticShutdowns),
+    ("power history matcher leaves unmatched shutdowns manual", PowerHistoryMatcherLeavesUnmatchedShutdownsManual),
+    ("power history filters recent records", PowerHistoryFiltersRecentRecords)
 };
 
 var failed = 0;
@@ -217,6 +221,90 @@ static void LegacyReminderTimesInferLeadMinutes()
     Equal(5, settings.Reminders[1].LeadMinutes.GetValueOrDefault());
     Equal("23:55", settings.Reminders[1].Time);
     Equal("还有5分钟自动关机", settings.Reminders[1].Message);
+}
+
+static void AutomaticShutdownMarkersPersistAndIgnoreCorruptFiles()
+{
+    var directory = CreateTempDirectory();
+    try
+    {
+        var filePath = Path.Combine(directory, "shutdown-markers.json");
+        var store = new AutomaticShutdownMarkerStore(filePath);
+        var marker = new AutomaticShutdownMarker(new DateTime(2026, 7, 7, 1, 0, 0), "01:00", true);
+
+        store.Add(marker);
+
+        var loaded = store.Load();
+        Equal(1, loaded.Count);
+        Equal(marker, loaded[0]);
+
+        File.WriteAllText(filePath, "{ broken json");
+        Equal(0, store.Load().Count);
+
+        store.Add(marker);
+        Equal(1, store.Load().Count);
+    }
+    finally
+    {
+        Directory.Delete(directory, recursive: true);
+    }
+}
+
+static void PowerHistoryMatcherMarksAutomaticShutdowns()
+{
+    var shutdown = new PowerHistoryRecord(
+        new DateTime(2026, 7, 7, 1, 0, 30),
+        PowerEventType.Shutdown,
+        ShutdownOrigin.ManualOrSystem,
+        IsAutomaticShutdown: false,
+        "Windows 正常关机");
+    var marker = new AutomaticShutdownMarker(new DateTime(2026, 7, 7, 1, 0, 0), "01:00", false);
+
+    var records = PowerHistoryMatcher.ApplyAutomaticShutdownMarkers(
+        [shutdown],
+        [marker],
+        TimeSpan.FromMinutes(5));
+
+    Equal(1, records.Count);
+    True(records[0].IsAutomaticShutdown);
+    Equal(ShutdownOrigin.Automatic, records[0].Origin);
+    True(records[0].Description.Contains("本应用定时关机", StringComparison.Ordinal));
+}
+
+static void PowerHistoryMatcherLeavesUnmatchedShutdownsManual()
+{
+    var shutdown = new PowerHistoryRecord(
+        new DateTime(2026, 7, 7, 1, 10, 0),
+        PowerEventType.Shutdown,
+        ShutdownOrigin.ManualOrSystem,
+        IsAutomaticShutdown: false,
+        "Windows 正常关机");
+    var marker = new AutomaticShutdownMarker(new DateTime(2026, 7, 7, 1, 0, 0), "01:00", false);
+
+    var records = PowerHistoryMatcher.ApplyAutomaticShutdownMarkers(
+        [shutdown],
+        [marker],
+        TimeSpan.FromMinutes(5));
+
+    Equal(1, records.Count);
+    False(records[0].IsAutomaticShutdown);
+    Equal(ShutdownOrigin.ManualOrSystem, records[0].Origin);
+    Equal("Windows 正常关机", records[0].Description);
+}
+
+static void PowerHistoryFiltersRecentRecords()
+{
+    var records = PowerHistoryMatcher.FilterSince(
+        [
+            new PowerHistoryRecord(new DateTime(2026, 6, 1, 0, 0, 0), PowerEventType.Startup, ShutdownOrigin.ManualOrSystem, false, "old"),
+            new PowerHistoryRecord(new DateTime(2026, 7, 1, 0, 0, 0), PowerEventType.Startup, ShutdownOrigin.ManualOrSystem, false, "recent"),
+            new PowerHistoryRecord(new DateTime(2026, 7, 7, 0, 0, 0), PowerEventType.Shutdown, ShutdownOrigin.ManualOrSystem, false, "new")
+        ],
+        new DateTime(2026, 6, 7, 0, 0, 0));
+
+    Equal(2, records.Count);
+    Equal("new", records[0].Description);
+    Equal("recent", records[1].Description);
 }
 
 static void Equal<T>(T expected, T actual)

@@ -12,6 +12,8 @@ Defaults:
 - The settings window can be resized manually.
 - Shutdown time is edited with the time picker.
 - Reminders are edited as "N minutes before shutdown"; the exact reminder time and message are shown automatically.
+- The settings window has a history tab that shows startup and shutdown records from the Windows System event log.
+- Shutdowns triggered by this app are marked as automatic in the history tab.
 - The settings window can be minimized to the tray and reopened from the tray menu or tray icon.
 - Only one tray app instance can run at a time.
 - If a settings file is corrupted, it is backed up as `*.bad.json` and defaults are restored automatically.
@@ -61,6 +63,12 @@ Runtime state, including a paused shutdown date, is saved to:
 
 ```text
 %AppData%\WindowsShutdownTimer\state.json
+```
+
+Automatic shutdown markers used by the history tab are saved to:
+
+```text
+%AppData%\WindowsShutdownTimer\shutdown-markers.json
 ```
 
 Uninstalling from Windows Settings or the Start menu shortcut removes the installed app files, startup registry entry, and the `%AppData%\WindowsShutdownTimer` settings folder.

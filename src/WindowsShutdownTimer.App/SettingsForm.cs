@@ -4,6 +4,8 @@ namespace WindowsShutdownTimer.App;
 
 public sealed class SettingsForm : Form
 {
+    private const int PowerHistoryDays = 30;
+
     private static readonly Color ShellBack = Color.FromArgb(241, 245, 249);
     private static readonly Color SurfaceBack = Color.FromArgb(255, 255, 255);
     private static readonly Color Primary = Color.FromArgb(37, 99, 235);
@@ -20,21 +22,29 @@ public sealed class SettingsForm : Form
     private readonly CheckBox _startWithWindowsCheckBox = new() { Text = "登录 Windows 后自动启动", AutoSize = true };
     private readonly DateTimePicker _shutdownTimePicker = new();
     private readonly DataGridView _remindersGrid = new();
+    private readonly DataGridView _powerHistoryGrid = new();
     private readonly Label _shutdownTimeBadge = new();
     private readonly Label _timeUntilShutdownLabel = new();
     private readonly Label _statusLabel = new();
+    private readonly Label _historyStatusLabel = new();
     private readonly System.Windows.Forms.Timer _previewTimer = new() { Interval = 1_000 };
     private readonly Action<AppSettings> _saveDefaultSettings;
+    private readonly PowerHistoryService _powerHistoryService;
     private AppSettings _defaultSettings;
     private string _lastValidShutdownTime = "00:00";
     private bool _loadingSettings;
     private bool _syncingShutdownTime;
 
-    public SettingsForm(AppSettings settings, AppSettings defaultSettings, Action<AppSettings> saveDefaultSettings)
+    public SettingsForm(
+        AppSettings settings,
+        AppSettings defaultSettings,
+        Action<AppSettings> saveDefaultSettings,
+        PowerHistoryService powerHistoryService)
     {
         Settings = Clone(settings);
         _defaultSettings = Clone(defaultSettings);
         _saveDefaultSettings = saveDefaultSettings;
+        _powerHistoryService = powerHistoryService;
 
         Text = "Windows 定时关机设置";
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -50,6 +60,7 @@ public sealed class SettingsForm : Form
 
         BuildLayout();
         LoadSettings();
+        LoadPowerHistory();
 
         _previewTimer.Tick += (_, _) => UpdateShutdownPreview();
         _previewTimer.Start();
@@ -78,6 +89,31 @@ public sealed class SettingsForm : Form
 
     private void BuildLayout()
     {
+        var tabs = new TabControl
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Point(12, 5)
+        };
+
+        var settingsPage = new TabPage("设置")
+        {
+            BackColor = ShellBack
+        };
+        settingsPage.Controls.Add(CreateSettingsPage());
+
+        var historyPage = new TabPage("记录")
+        {
+            BackColor = ShellBack
+        };
+        historyPage.Controls.Add(CreateHistoryPage());
+
+        tabs.TabPages.Add(settingsPage);
+        tabs.TabPages.Add(historyPage);
+        Controls.Add(tabs);
+    }
+
+    private Control CreateSettingsPage()
+    {
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -91,7 +127,6 @@ public sealed class SettingsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        Controls.Add(root);
         root.Controls.Add(CreateHeaderPanel());
 
         var options = new FlowLayoutPanel
@@ -234,6 +269,59 @@ public sealed class SettingsForm : Form
         root.Controls.Add(bottom);
 
         AcceptButton = saveButton;
+        return root;
+    }
+
+    private Control CreateHistoryPage()
+    {
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(18, 18, 18, 6),
+            BackColor = ShellBack
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        ConfigurePowerHistoryGrid();
+        root.Controls.Add(_powerHistoryGrid);
+
+        var bottom = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            AutoSize = true,
+            Padding = new Padding(0, 6, 0, 0),
+            BackColor = ShellBack
+        };
+        bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        bottom.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        _historyStatusLabel.AutoSize = true;
+        _historyStatusLabel.ForeColor = TextMuted;
+        _historyStatusLabel.Padding = new Padding(0, 9, 8, 0);
+        _historyStatusLabel.Margin = new Padding(0);
+
+        var refreshButton = CreateBottomButton("刷新", 112, ButtonTone.Primary);
+        refreshButton.Click += (_, _) => LoadPowerHistory();
+
+        var refreshButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            WrapContents = true,
+            BackColor = ShellBack
+        };
+        refreshButtons.Controls.Add(refreshButton);
+
+        bottom.Controls.Add(_historyStatusLabel, 0, 0);
+        bottom.Controls.Add(refreshButtons, 1, 0);
+        root.Controls.Add(bottom);
+        return root;
     }
 
     private Control CreateHeaderPanel()
@@ -465,6 +553,93 @@ public sealed class SettingsForm : Form
         };
     }
 
+    private void ConfigurePowerHistoryGrid()
+    {
+        if (_powerHistoryGrid.Columns.Count > 0)
+        {
+            return;
+        }
+
+        _powerHistoryGrid.Dock = DockStyle.Fill;
+        _powerHistoryGrid.MinimumSize = new Size(0, 220);
+        _powerHistoryGrid.AllowUserToAddRows = false;
+        _powerHistoryGrid.AllowUserToDeleteRows = false;
+        _powerHistoryGrid.AllowUserToResizeRows = false;
+        _powerHistoryGrid.ReadOnly = true;
+        _powerHistoryGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _powerHistoryGrid.MultiSelect = false;
+        _powerHistoryGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        _powerHistoryGrid.RowHeadersVisible = false;
+        _powerHistoryGrid.BackgroundColor = SurfaceBack;
+        _powerHistoryGrid.BorderStyle = BorderStyle.None;
+        _powerHistoryGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        _powerHistoryGrid.GridColor = Border;
+        _powerHistoryGrid.EnableHeadersVisualStyles = false;
+        _powerHistoryGrid.ColumnHeadersHeight = 38;
+        _powerHistoryGrid.RowTemplate.Height = 34;
+        _powerHistoryGrid.Margin = new Padding(0);
+        _powerHistoryGrid.DefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.White,
+            ForeColor = TextMain,
+            SelectionBackColor = Color.FromArgb(219, 234, 254),
+            SelectionForeColor = TextMain,
+            Font = Font
+        };
+        _powerHistoryGrid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.FromArgb(248, 250, 252)
+        };
+        _powerHistoryGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = PrimaryDark,
+            ForeColor = Color.White,
+            SelectionBackColor = PrimaryDark,
+            SelectionForeColor = Color.White,
+            Font = new Font(Font.FontFamily, 9F, FontStyle.Bold, GraphicsUnit.Point),
+            Alignment = DataGridViewContentAlignment.MiddleCenter
+        };
+
+        _powerHistoryGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "时间",
+            Name = "OccurredAt",
+            FillWeight = 110,
+            MinimumWidth = 168
+        });
+        _powerHistoryGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "事件",
+            Name = "EventType",
+            FillWeight = 48,
+            MinimumWidth = 80,
+            DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter }
+        });
+        _powerHistoryGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "方式",
+            Name = "Origin",
+            FillWeight = 80,
+            MinimumWidth = 116,
+            DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter }
+        });
+        _powerHistoryGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "自动关机",
+            Name = "Automatic",
+            FillWeight = 58,
+            MinimumWidth = 92,
+            DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter }
+        });
+        _powerHistoryGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "说明",
+            Name = "Description",
+            FillWeight = 220,
+            MinimumWidth = 260
+        });
+    }
+
     private void LoadSettings()
     {
         _loadingSettings = true;
@@ -479,6 +654,50 @@ public sealed class SettingsForm : Form
         UpdateShutdownPreview();
         SetStatus("");
         _loadingSettings = false;
+    }
+
+    private void LoadPowerHistory()
+    {
+        _historyStatusLabel.Text = $"正在读取最近 {PowerHistoryDays} 天记录...";
+        _powerHistoryGrid.Rows.Clear();
+
+        try
+        {
+            var records = _powerHistoryService.GetRecentHistory(TimeSpan.FromDays(PowerHistoryDays));
+
+            foreach (var record in records)
+            {
+                _powerHistoryGrid.Rows.Add(
+                    record.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss"),
+                    FormatPowerEventType(record.EventType),
+                    FormatShutdownOrigin(record),
+                    record.IsAutomaticShutdown ? "是" : "否",
+                    record.Description);
+            }
+
+            _historyStatusLabel.Text = records.Count == 0
+                ? $"最近 {PowerHistoryDays} 天没有读取到开关机记录"
+                : $"已加载最近 {PowerHistoryDays} 天，共 {records.Count} 条记录";
+        }
+        catch (Exception ex)
+        {
+            _historyStatusLabel.Text = ex.Message;
+        }
+    }
+
+    private static string FormatPowerEventType(PowerEventType eventType)
+    {
+        return eventType == PowerEventType.Startup ? "开机" : "关机";
+    }
+
+    private static string FormatShutdownOrigin(PowerHistoryRecord record)
+    {
+        if (record.EventType == PowerEventType.Startup)
+        {
+            return "系统";
+        }
+
+        return record.IsAutomaticShutdown ? "本应用自动" : "手动/系统";
     }
 
     private void LoadReminderRows()

@@ -21,12 +21,15 @@ internal static class Program
         }
 
         ApplicationConfiguration.Initialize();
+        var automaticShutdownMarkerStore = new AutomaticShutdownMarkerStore();
         using var context = new TrayApplicationContext(
             new SettingsStore(),
             new StartupService(),
             new SpeechReminderService(),
             new WindowsNotificationService(),
-            new ShutdownService());
+            new ShutdownService(),
+            automaticShutdownMarkerStore,
+            new PowerHistoryService(automaticShutdownMarkerStore));
 
         Application.Run(context);
     }

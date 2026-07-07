@@ -11,6 +11,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly SpeechReminderService _speechService;
     private readonly WindowsNotificationService _notificationService;
     private readonly ShutdownService _shutdownService;
+    private readonly AutomaticShutdownMarkerStore _automaticShutdownMarkerStore;
+    private readonly PowerHistoryService _powerHistoryService;
     private readonly ScheduleState _scheduleState;
     private readonly System.Windows.Forms.Timer _timer;
     private readonly NotifyIcon _notifyIcon;
@@ -26,13 +28,17 @@ public sealed class TrayApplicationContext : ApplicationContext
         StartupService startupService,
         SpeechReminderService speechService,
         WindowsNotificationService notificationService,
-        ShutdownService shutdownService)
+        ShutdownService shutdownService,
+        AutomaticShutdownMarkerStore automaticShutdownMarkerStore,
+        PowerHistoryService powerHistoryService)
     {
         _settingsStore = settingsStore;
         _startupService = startupService;
         _speechService = speechService;
         _notificationService = notificationService;
         _shutdownService = shutdownService;
+        _automaticShutdownMarkerStore = automaticShutdownMarkerStore;
+        _powerHistoryService = powerHistoryService;
         _defaultSettingsStore = new SettingsStore(SettingsStore.GetDefaultSettingsFilePath());
         _scheduleStateStore = new ScheduleStateStore();
         _settings = _settingsStore.Load();
@@ -83,7 +89,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         var form = new SettingsForm(
             _settings,
             _defaultSettingsStore.Load(),
-            defaults => _defaultSettingsStore.Save(defaults));
+            defaults => _defaultSettingsStore.Save(defaults),
+            _powerHistoryService);
         _settingsForm = form;
         form.FormClosed += (_, _) =>
         {
@@ -198,6 +205,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             _notificationService.Show("定时关机提醒", "到点了，10秒后自动关机。");
             ShowBalloon("定时关机提醒", "到点了，10秒后自动关机。");
             await _speechService.SpeakShutdownCountdownAsync();
+            SaveAutomaticShutdownMarker(forceShutdown);
             _shutdownService.Shutdown(forceShutdown);
         }
         catch (Exception ex)
@@ -205,6 +213,21 @@ public sealed class TrayApplicationContext : ApplicationContext
             ShowBalloon("定时关机失败", ex.Message);
             _shutdownCountdownRunning = false;
             _timer.Start();
+        }
+    }
+
+    private void SaveAutomaticShutdownMarker(bool forceShutdown)
+    {
+        try
+        {
+            _automaticShutdownMarkerStore.Add(new AutomaticShutdownMarker(
+                DateTime.Now,
+                _settings.ShutdownTime,
+                forceShutdown));
+        }
+        catch
+        {
+            // Shutdown should continue even when local history metadata cannot be written.
         }
     }
 
