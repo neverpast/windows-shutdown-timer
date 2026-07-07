@@ -5,7 +5,7 @@ namespace WindowsShutdownTimer.App;
 public sealed class SettingsForm : Form
 {
     private const int PowerHistoryDays = 30;
-    private const int BottomBarHeight = 52;
+    private const int BottomBarHeight = 60;
     private const int BottomButtonHeight = 40;
     private const int BottomButtonGap = 8;
 
@@ -122,7 +122,7 @@ public sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 5,
-            Padding = new Padding(18, 18, 18, 6),
+            Padding = new Padding(18, 18, 18, 10),
             BackColor = ShellBack
         };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -184,7 +184,7 @@ public sealed class SettingsForm : Form
             AutoSize = false,
             Height = BottomBarHeight,
             MinimumSize = new Size(0, BottomBarHeight),
-            Padding = new Padding(0, 6, 0, 6),
+            Padding = new Padding(0, 6, 0, 14),
             BackColor = ShellBack
         };
         bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -293,7 +293,7 @@ public sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2,
-            Padding = new Padding(18, 18, 18, 6),
+            Padding = new Padding(18, 18, 18, 10),
             BackColor = ShellBack
         };
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -308,7 +308,7 @@ public sealed class SettingsForm : Form
             ColumnCount = 2,
             RowCount = 1,
             AutoSize = true,
-            Padding = new Padding(0, 6, 0, 0),
+            Padding = new Padding(0, 6, 0, 10),
             BackColor = ShellBack
         };
         bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -406,16 +406,16 @@ public sealed class SettingsForm : Form
 
         _shutdownTimeBadge.Text = Settings.ShutdownTime;
         _shutdownTimeBadge.AutoSize = false;
-        _shutdownTimeBadge.TextAlign = ContentAlignment.MiddleCenter;
+        _shutdownTimeBadge.TextAlign = ContentAlignment.MiddleLeft;
         _shutdownTimeBadge.Font = new Font(Font.FontFamily, 14F, FontStyle.Bold, GraphicsUnit.Point);
         _shutdownTimeBadge.ForeColor = Color.White;
-        _shutdownTimeBadge.BackColor = PrimaryDark;
-        _shutdownTimeBadge.Size = new Size(124, 42);
-        _shutdownTimeBadge.MinimumSize = new Size(124, 42);
-        _shutdownTimeBadge.Margin = new Padding(0, 0, 0, 5);
+        _shutdownTimeBadge.BackColor = Primary;
+        _shutdownTimeBadge.Size = new Size(190, 34);
+        _shutdownTimeBadge.MinimumSize = new Size(190, 34);
+        _shutdownTimeBadge.Margin = new Padding(0);
 
         _timeUntilShutdownLabel.AutoSize = false;
-        _timeUntilShutdownLabel.TextAlign = ContentAlignment.MiddleCenter;
+        _timeUntilShutdownLabel.TextAlign = ContentAlignment.MiddleLeft;
         _timeUntilShutdownLabel.Font = new Font(Font.FontFamily, 8.5F, FontStyle.Regular, GraphicsUnit.Point);
         _timeUntilShutdownLabel.ForeColor = Color.FromArgb(219, 234, 254);
         _timeUntilShutdownLabel.BackColor = Primary;
