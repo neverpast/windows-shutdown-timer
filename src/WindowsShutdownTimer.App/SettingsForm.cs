@@ -5,6 +5,9 @@ namespace WindowsShutdownTimer.App;
 public sealed class SettingsForm : Form
 {
     private const int PowerHistoryDays = 30;
+    private const int BottomBarHeight = 52;
+    private const int BottomButtonHeight = 40;
+    private const int BottomButtonGap = 8;
 
     private static readonly Color ShellBack = Color.FromArgb(241, 245, 249);
     private static readonly Color SurfaceBack = Color.FromArgb(255, 255, 255);
@@ -53,7 +56,7 @@ public sealed class SettingsForm : Form
         MaximizeBox = true;
         FormBorderStyle = FormBorderStyle.Sizable;
         ClientSize = new Size(980, 660);
-        MinimumSize = new Size(760, 500);
+        MinimumSize = new Size(840, 560);
         Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
         BackColor = ShellBack;
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? Icon;
@@ -126,7 +129,7 @@ public sealed class SettingsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, BottomBarHeight));
         root.Controls.Add(CreateHeaderPanel());
 
         var options = new FlowLayoutPanel
@@ -178,8 +181,10 @@ public sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 1,
-            AutoSize = true,
-            Padding = new Padding(0, 6, 0, 0),
+            AutoSize = false,
+            Height = BottomBarHeight,
+            MinimumSize = new Size(0, BottomBarHeight),
+            Padding = new Padding(0, 6, 0, 6),
             BackColor = ShellBack
         };
         bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -189,8 +194,8 @@ public sealed class SettingsForm : Form
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
-            AutoSize = true,
-            WrapContents = true,
+            AutoSize = false,
+            WrapContents = false,
             BackColor = ShellBack
         };
 
@@ -198,8 +203,8 @@ public sealed class SettingsForm : Form
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
-            AutoSize = true,
-            WrapContents = true,
+            AutoSize = false,
+            WrapContents = false,
             BackColor = ShellBack
         };
 
@@ -253,10 +258,19 @@ public sealed class SettingsForm : Form
             }
         };
 
-        _statusLabel.AutoSize = true;
+        _statusLabel.AutoSize = false;
         _statusLabel.ForeColor = TextMuted;
-        _statusLabel.Padding = new Padding(8, 9, 0, 0);
-        _statusLabel.Margin = new Padding(4, 0, 0, 0);
+        _statusLabel.Padding = new Padding(4, 0, 0, 0);
+        _statusLabel.Margin = new Padding(0);
+        _statusLabel.Size = new Size(220, BottomButtonHeight);
+        _statusLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _statusLabel.AutoEllipsis = true;
+
+        restoreDefaultsButton.Margin = new Padding(0, 0, BottomButtonGap, 0);
+        saveDefaultsButton.Margin = new Padding(0, 0, BottomButtonGap, 0);
+        addButton.Margin = new Padding(0, 0, BottomButtonGap, 0);
+        deleteButton.Margin = new Padding(0, 0, BottomButtonGap, 0);
+        saveButton.Margin = new Padding(0);
 
         editButtons.Controls.Add(restoreDefaultsButton);
         editButtons.Controls.Add(saveDefaultsButton);
@@ -453,8 +467,8 @@ public sealed class SettingsForm : Form
         {
             Text = text,
             Width = width,
-            Height = 40,
-            Margin = new Padding(4, 0, 4, 0),
+            Height = BottomButtonHeight,
+            Margin = new Padding(0),
             Padding = new Padding(8, 0, 8, 0),
             AutoEllipsis = false,
             FlatStyle = FlatStyle.Flat,
@@ -479,7 +493,7 @@ public sealed class SettingsForm : Form
     private void ConfigureGrid()
     {
         _remindersGrid.Dock = DockStyle.Fill;
-        _remindersGrid.MinimumSize = new Size(0, 120);
+        _remindersGrid.MinimumSize = new Size(0, 80);
         _remindersGrid.AllowUserToAddRows = false;
         _remindersGrid.AllowUserToResizeRows = false;
         _remindersGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
