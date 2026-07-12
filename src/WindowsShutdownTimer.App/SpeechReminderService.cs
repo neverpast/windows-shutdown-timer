@@ -34,7 +34,7 @@ public sealed class SpeechReminderService : IDisposable
         }
     }
 
-    public Task SpeakShutdownCountdownAsync(CancellationToken cancellationToken = default)
+    public Task SpeakShutdownCountdownAsync(DateTime shutdownAt, CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
@@ -44,16 +44,23 @@ public sealed class SpeechReminderService : IDisposable
                 {
                     _synthesizer.SpeakAsyncCancelAll();
 
-                    for (var number = 10; number >= 1; number--)
+                    while (true)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        var started = DateTime.UtcNow;
+
+                        var remainingSeconds = (int)Math.Ceiling((shutdownAt - DateTime.Now).TotalSeconds);
+                        if (remainingSeconds <= 0)
+                        {
+                            return;
+                        }
+
+                        var number = Math.Min(remainingSeconds, 10);
                         _synthesizer.Speak(number.ToString());
 
-                        var remaining = TimeSpan.FromSeconds(1) - (DateTime.UtcNow - started);
-                        if (remaining > TimeSpan.Zero)
+                        var delay = shutdownAt.AddSeconds(-(number - 1)) - DateTime.Now;
+                        if (delay > TimeSpan.Zero)
                         {
-                            cancellationToken.WaitHandle.WaitOne(remaining);
+                            cancellationToken.WaitHandle.WaitOne(delay);
                         }
                     }
                 }
@@ -64,7 +71,11 @@ public sealed class SpeechReminderService : IDisposable
             catch
             {
                 SystemSounds.Exclamation.Play();
-                Thread.Sleep(TimeSpan.FromSeconds(10));
+                var remaining = shutdownAt - DateTime.Now;
+                if (remaining > TimeSpan.Zero)
+                {
+                    cancellationToken.WaitHandle.WaitOne(remaining);
+                }
             }
         }, cancellationToken);
     }

@@ -4,6 +4,9 @@ namespace WindowsShutdownTimer.App;
 
 public sealed class TrayApplicationContext : ApplicationContext
 {
+    private static readonly TimeSpan ScheduleCorrectionInterval = TimeSpan.FromMinutes(5);
+    private const int MinimumScheduleIntervalMs = 250;
+
     private readonly SettingsStore _settingsStore;
     private readonly SettingsStore _defaultSettingsStore;
     private readonly ScheduleStateStore _scheduleStateStore;
@@ -21,6 +24,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     private ToolStripMenuItem _pauseItem = null!;
     private ToolStripMenuItem _resumeItem = null!;
     private SettingsForm? _settingsForm;
+    private CancellationTokenSource? _shutdownCountdownCancellation;
+    private DateTime? _shutdownCountdownScheduledAt;
     private bool _shutdownCountdownRunning;
 
     public TrayApplicationContext(
@@ -56,9 +61,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         _notificationService.Register();
         ApplyStartup();
 
-        _timer = new System.Windows.Forms.Timer { Interval = 15_000 };
+        _timer = new System.Windows.Forms.Timer();
         _timer.Tick += (_, _) => CheckSchedule();
-        _timer.Start();
 
         CheckSchedule();
     }
@@ -100,6 +104,7 @@ public sealed class TrayApplicationContext : ApplicationContext
                 _settingsStore.Save(_settings);
                 ApplyStartup();
                 UpdatePauseMenu();
+                ScheduleNextCheck();
             }
 
             if (ReferenceEquals(_settingsForm, form))
@@ -115,11 +120,14 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void PauseTonight()
     {
-        var nextShutdown = ScheduleEngine.GetNextOccurrence(DateTime.Now, _settings.ShutdownTime);
-        _scheduleState.PauseShutdownFor(DateOnly.FromDateTime(nextShutdown));
+        var shutdownToPause = _shutdownCountdownScheduledAt ??
+            ScheduleEngine.GetNextOccurrence(DateTime.Now, _settings.ShutdownTime);
+        _scheduleState.PauseShutdownFor(DateOnly.FromDateTime(shutdownToPause));
+        CancelShutdownCountdown();
         SaveScheduleState();
         UpdatePauseMenu();
-        ShowBalloon("定时关机", $"已暂停 {nextShutdown:yyyy-MM-dd HH:mm} 的自动关机。");
+        ScheduleNextCheck();
+        ShowBalloon("定时关机", $"已暂停 {shutdownToPause:yyyy-MM-dd HH:mm} 的自动关机。");
     }
 
     private void ResumeTonight()
@@ -127,6 +135,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _scheduleState.ResumeShutdown();
         SaveScheduleState();
         UpdatePauseMenu();
+        ScheduleNextCheck();
         ShowBalloon("定时关机", "已恢复自动关机。");
     }
 
@@ -152,6 +161,8 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void CheckSchedule()
     {
+        _timer.Stop();
+
         IReadOnlyList<DueScheduleEvent> events;
         var previousPausedDate = _scheduleState.PausedShutdownDate;
 
@@ -166,6 +177,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         catch (Exception ex)
         {
             ShowBalloon("定时关机配置错误", ex.Message);
+            ScheduleNextCheck();
             return;
         }
 
@@ -182,14 +194,19 @@ public sealed class TrayApplicationContext : ApplicationContext
             }
             else if (dueEvent.Type == ScheduleEventType.Shutdown)
             {
-                StartShutdownCountdown();
+                StartShutdownCountdown(dueEvent.ScheduledAt);
             }
         }
 
         UpdatePauseMenu();
+
+        if (!_shutdownCountdownRunning)
+        {
+            ScheduleNextCheck();
+        }
     }
 
-    private async void StartShutdownCountdown()
+    private async void StartShutdownCountdown(DateTime scheduledAt)
     {
         if (_shutdownCountdownRunning)
         {
@@ -197,22 +214,87 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
 
         _shutdownCountdownRunning = true;
+        var countdownCancellation = new CancellationTokenSource();
+        _shutdownCountdownCancellation = countdownCancellation;
+        _shutdownCountdownScheduledAt = scheduledAt;
         _timer.Stop();
+        var shutdownStarted = false;
 
         try
         {
             var forceShutdown = _settings.ForceShutdown;
-            _notificationService.Show("定时关机提醒", "到点了，10秒后自动关机。");
-            ShowBalloon("定时关机提醒", "到点了，10秒后自动关机。");
-            await _speechService.SpeakShutdownCountdownAsync();
+            _notificationService.Show("定时关机提醒", $"{scheduledAt:HH:mm} 将按计划自动关机。");
+            ShowBalloon("定时关机提醒", $"{scheduledAt:HH:mm} 将按计划自动关机。");
+            await _speechService.SpeakShutdownCountdownAsync(scheduledAt, countdownCancellation.Token);
+
+            if (countdownCancellation.IsCancellationRequested)
+            {
+                return;
+            }
+
             SaveAutomaticShutdownMarker(forceShutdown);
             _shutdownService.Shutdown(forceShutdown);
+            shutdownStarted = true;
         }
         catch (Exception ex)
         {
-            ShowBalloon("定时关机失败", ex.Message);
+            if (!countdownCancellation.IsCancellationRequested)
+            {
+                ShowBalloon("定时关机失败", ex.Message);
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_shutdownCountdownCancellation, countdownCancellation))
+            {
+                _shutdownCountdownCancellation = null;
+                _shutdownCountdownScheduledAt = null;
+            }
+
+            countdownCancellation.Dispose();
             _shutdownCountdownRunning = false;
+
+            if (!shutdownStarted)
+            {
+                UpdatePauseMenu();
+                ScheduleNextCheck();
+            }
+        }
+    }
+
+    private void ScheduleNextCheck()
+    {
+        if (_shutdownCountdownRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            var now = DateTime.Now;
+            var nextCheck = ScheduleEngine.GetNextCheckTime(
+                now,
+                _settings,
+                _scheduleState,
+                ScheduleEngine.DefaultMaxLateness,
+                ScheduleCorrectionInterval);
+            var delay = nextCheck - now;
+
+            _timer.Interval = Math.Max(MinimumScheduleIntervalMs, (int)Math.Ceiling(delay.TotalMilliseconds));
             _timer.Start();
+        }
+        catch
+        {
+            _timer.Interval = (int)ScheduleCorrectionInterval.TotalMilliseconds;
+            _timer.Start();
+        }
+    }
+
+    private void CancelShutdownCountdown()
+    {
+        if (_shutdownCountdownRunning)
+        {
+            _shutdownCountdownCancellation?.Cancel();
         }
     }
 

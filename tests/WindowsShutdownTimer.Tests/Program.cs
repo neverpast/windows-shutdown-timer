@@ -5,6 +5,11 @@ var tests = new (string Name, Action Test)[]
     ("normalizes 24:00 to 00:00", NormalizesMidnight),
     ("calculates next occurrences", CalculatesNextOccurrences),
     ("fires reminders once per day", FiresReminderOncePerDay),
+    ("shutdown countdown starts before scheduled time", ShutdownCountdownStartsBeforeScheduledTime),
+    ("next check uses next reminder time", NextCheckUsesNextReminderTime),
+    ("next check uses shutdown countdown start", NextCheckUsesShutdownCountdownStart),
+    ("next check skips paused shutdown reminders", NextCheckSkipsPausedShutdownReminders),
+    ("pause tonight skips reminders for selected shutdown", PauseTonightSkipsRemindersForSelectedShutdown),
     ("pause tonight skips only selected shutdown date", PauseTonightSkipsOnlySelectedDate),
     ("shutdown args default stays non-force", DefaultForceShutdownIsFalse),
     ("default settings restore midnight shutdown", DefaultSettingsRestoreMidnightShutdown),
@@ -71,6 +76,84 @@ static void FiresReminderOncePerDay()
     Equal(0, second.Count(e => e.Type == ScheduleEventType.Reminder));
 }
 
+static void ShutdownCountdownStartsBeforeScheduledTime()
+{
+    var settings = AppSettings.CreateDefault();
+    var state = new ScheduleState();
+
+    var tooEarly = ScheduleEngine.GetDueEvents(
+        new DateTime(2026, 7, 3, 23, 59, 49),
+        settings,
+        state,
+        TimeSpan.FromMinutes(2));
+
+    Equal(0, tooEarly.Count(e => e.Type == ScheduleEventType.Shutdown));
+
+    var countdownWindow = ScheduleEngine.GetDueEvents(
+        new DateTime(2026, 7, 3, 23, 59, 50),
+        settings,
+        state,
+        TimeSpan.FromMinutes(2));
+
+    Equal(1, countdownWindow.Count(e => e.Type == ScheduleEventType.Shutdown));
+    Equal(new DateTime(2026, 7, 4, 0, 0, 0), countdownWindow.Single(e => e.Type == ScheduleEventType.Shutdown).ScheduledAt);
+}
+
+static void NextCheckUsesNextReminderTime()
+{
+    var settings = AppSettings.CreateDefault();
+    var state = new ScheduleState();
+    var now = new DateTime(2026, 7, 3, 23, 40, 0);
+
+    var nextCheck = ScheduleEngine.GetNextCheckTime(
+        now,
+        settings,
+        state,
+        TimeSpan.FromMinutes(2),
+        TimeSpan.FromMinutes(5));
+
+    Equal(new DateTime(2026, 7, 3, 23, 45, 0), nextCheck);
+}
+
+static void NextCheckUsesShutdownCountdownStart()
+{
+    var settings = AppSettings.CreateDefault();
+    var state = new ScheduleState();
+    var now = new DateTime(2026, 7, 3, 23, 59, 40);
+
+    foreach (var reminder in settings.Reminders)
+    {
+        state.MarkFired($"reminder:{reminder.Id}:2026-07-03");
+    }
+
+    var nextCheck = ScheduleEngine.GetNextCheckTime(
+        now,
+        settings,
+        state,
+        TimeSpan.FromMinutes(2),
+        TimeSpan.FromMinutes(5));
+
+    Equal(new DateTime(2026, 7, 3, 23, 59, 50), nextCheck);
+}
+
+static void NextCheckSkipsPausedShutdownReminders()
+{
+    var settings = AppSettings.CreateDefault();
+    var state = new ScheduleState();
+    var now = new DateTime(2026, 7, 3, 23, 40, 0);
+
+    state.PauseShutdownFor(new DateOnly(2026, 7, 4));
+
+    var nextCheck = ScheduleEngine.GetNextCheckTime(
+        now,
+        settings,
+        state,
+        TimeSpan.FromMinutes(2),
+        TimeSpan.FromDays(2));
+
+    Equal(new DateTime(2026, 7, 4, 23, 45, 0), nextCheck);
+}
+
 static void PauseTonightSkipsOnlySelectedDate()
 {
     var settings = AppSettings.CreateDefault();
@@ -93,6 +176,32 @@ static void PauseTonightSkipsOnlySelectedDate()
         TimeSpan.FromMinutes(2));
 
     Equal(1, nextDay.Count(e => e.Type == ScheduleEventType.Shutdown));
+}
+
+static void PauseTonightSkipsRemindersForSelectedShutdown()
+{
+    var settings = AppSettings.CreateDefault();
+    var state = new ScheduleState();
+
+    state.PauseShutdownFor(new DateOnly(2026, 7, 4));
+
+    var paused = ScheduleEngine.GetDueEvents(
+        new DateTime(2026, 7, 3, 23, 55, 5),
+        settings,
+        state,
+        TimeSpan.FromMinutes(2));
+
+    Equal(0, paused.Count(e => e.Type == ScheduleEventType.Reminder));
+
+    state.ResumeShutdown();
+
+    var nextDay = ScheduleEngine.GetDueEvents(
+        new DateTime(2026, 7, 4, 23, 55, 5),
+        settings,
+        state,
+        TimeSpan.FromMinutes(2));
+
+    Equal(1, nextDay.Count(e => e.Type == ScheduleEventType.Reminder));
 }
 
 static void DefaultForceShutdownIsFalse()
